@@ -13,7 +13,7 @@ Bash
 
 ``` bash
 git clone https://github.com/rymuelle/RawHandler.git
-cd ConvNeXt-V2-UNet
+cd RawHandler
 ```
 
 2. Install with Pip:
