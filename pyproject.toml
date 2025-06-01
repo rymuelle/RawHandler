@@ -1,0 +1,32 @@
+[project]
+name = "RawHandler" 
+version = "0.0.1"
+description = "A basic library to handle camera raw files for use in machine learning. Built on rawpy and cv2."
+authors = [
+    { name = "Ryan Mueller"},
+]
+readme = "README.md"
+requires-python = ">=3.8" 
+license = { file = "LICENSE" }
+keywords = ["python", "Machine Learning", "Camera Raw"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy>=2.2.5",
+    "rawpy>=0.24.0",
+    "opencv-python>=4.11.0.86"
+    ]
+
+[project.urls]
+"Homepage" = "https://github.com/rymuelle/RawHandler"
+"Bug Tracker" = "https://github.com/rymuelle/RawHandler/issues"
+
+[build-system]
+requires = ["setuptools>=61.0"] 
+build-backend = "setuptools.build_meta" 
+
+[tool.setuptools.packages.find]
+where = ["src"]
