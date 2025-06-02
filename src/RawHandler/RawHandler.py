@@ -1,5 +1,5 @@
 import numpy as np
-import cv2
+from colour_demosaicing import demosaicing_CFA_Bayer_Menon2007
 import rawpy
 
 
@@ -117,29 +117,20 @@ class RawHandler:
         Returns:
             rgb (np.array): Cropped, demosaiced data with dimenions [3, H, W ].
         """
-        color_code = {
-            "RGGB": cv2.COLOR_BayerRGGB2RGB_EA,
-            "GRBG": cv2.COLOR_BayerGRBG2RGB_EA,
-            "BGGR": cv2.COLOR_BayerBGGR2RGB_EA,
-            "GBRG": cv2.COLOR_BayerGBRG2RGB_EA,
-        }
-        assert self.bayer_pattern in ["RGGB", "GRBG", "BGGR", "GBRG"], (
+        assert self.bayer_pattern in ["RGGB", "BGGR", "GRBG", "GBRG"], (
             f"{self.bayer_pattern} is not supported for demosaicing."
         )
-        # Leave full sized for edge aware demosacing.
-        raw = self.adjust_bayer_bw_levels(self.input_handler(img=img))
-        raw = (raw * self.rawpy.white_level).astype(np.uint16)
-        rgb = cv2.demosaicing(raw[0], color_code[self.bayer_pattern]).transpose(2, 0, 1)
-        rgb = self.input_handler(dims=dims, img=rgb).astype(np.float32)
-        # This is a quick fix for now, but the white levels could vary by channel and we could subtract the black level.
-        rgb *= 1.0 / self.rawpy.white_level
-        return rgb
+        raw = self.input_handler(dims=dims, img=img)
+        raw = self.adjust_bayer_bw_levels(raw)
+        rgb = demosaicing_CFA_Bayer_Menon2007(raw.transpose(1, 2, 0), pattern=self.bayer_pattern)
+        return rgb.transpose(2, 0, 1)
 
     def as_RGB_colorspace(
         self, dims=None, img=None, xyz_to_colorspace=None, colorspace=None
     ):
         """
         Converts or returns demosaiced data converted into specified colorspace.
+        Resources: http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
 
         Args:
             image (np.array): Array of structure [C, H, W]. If 'None' returns the raw bayer data with masked pixels trimmed off. (optional)
@@ -149,10 +140,10 @@ class RawHandler:
         Returns:
             rgb (np.array): Cropped, demosaiced, and profiled data with dimenions [3, H, W ].
         """
-        # http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
         if img is None:
-            img = self.as_rgb(img=img)
-        img = self.input_handler(dims=dims, img=img)
+            img = self.as_rgb(dims=dims)
+        else:
+            img = self.input_handler(dims=dims, img=img)
         rgb_to_xyz = np.linalg.inv(self.rawpy.rgb_xyz_matrix[:3])
         xyz_to_colorspace = None
         if colorspace == "sRGB":
