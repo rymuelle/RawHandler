@@ -41,7 +41,6 @@ def align_images(
     img_shape = rh1.raw.shape[-2:]
 
     loss = get_loss(bayer1, rh2.input_handler(dims=dims + offset))
-    starting_loss = loss
 
     for step_size in step_sizes:
         directions = [
