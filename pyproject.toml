@@ -24,6 +24,9 @@ dependencies = [
 torch = [
     "torch>=2.7.0"
 ]
+example = [
+    "requests>=2.32.3"
+]
 
 [project.urls]
 "Homepage" = "https://github.com/rymuelle/RawHandler"
