@@ -122,7 +122,9 @@ class RawHandler:
         )
         raw = self.input_handler(dims=dims, img=img)
         raw = self.adjust_bayer_bw_levels(raw)
-        rgb = demosaicing_CFA_Bayer_Menon2007(raw.transpose(1, 2, 0), pattern=self.bayer_pattern)
+        rgb = demosaicing_CFA_Bayer_Menon2007(
+            raw.transpose(1, 2, 0), pattern=self.bayer_pattern
+        )
         return rgb.transpose(2, 0, 1)
 
     def as_RGB_colorspace(
