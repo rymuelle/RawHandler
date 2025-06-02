@@ -14,7 +14,7 @@ class RawHandler:
     def __init__(self, path):
         self.path = path
         self.rawpy = rawpy.imread(path)
-        self.raw = self.rawpy.raw_image
+        self.raw = self.rawpy.raw_image_visible
         assert self.rawpy.color_desc.decode() == "RGBG", (
             "Only raw files with Bayer patters are supported currently."
         )
@@ -39,6 +39,8 @@ class RawHandler:
         if img is None:
             img = np.expand_dims(self.raw, axis=0)
             img = self.remove_masked_pixels(img)
+        elif len(img.shape) == 2:
+            img = np.expand_dims(self.raw, axis=0)
         if dims is not None:
             if len(dims) != 4:
                 raise ValueError(
@@ -59,15 +61,17 @@ class RawHandler:
         channel_map[0, 1::2, 1::2] = self.rawpy.raw_pattern[1][1]
         return channel_map
 
-    def adjust_bayer_bw_levels(self, bayer):
-        bayer = bayer.astype(np.float32)
-        bayer_map = self.make_bayer_map(bayer)
+    def adjust_bayer_bw_levels(self, img=None, dims=None):
+        img = self.input_handler(img=img, dims=dims)
+        img = img.astype(np.float32)
+
+        bayer_map = self.make_bayer_map(img)
         for channel in range(4):
-            bayer[bayer_map == channel] -= self.rawpy.black_level_per_channel[channel]
-            bayer[bayer_map == channel] *= 1.0 / (
+            img[bayer_map == channel] -= self.rawpy.black_level_per_channel[channel]
+            img[bayer_map == channel] *= 1.0 / (
                 self.rawpy.white_level - self.rawpy.black_level_per_channel[channel]
             )
-        return bayer
+        return img
 
     def adjust_bayer_black_levels(self, bayer):
         bayer_map = self.make_bayer_map(bayer)
