@@ -185,7 +185,5 @@ class RawHandler:
             colorspace=colorspace, xyz_to_colorspace=xyz_to_colorspace
         )
         rggb_transform = transform_to_rggb(transform)
-        print(rggb_transform)
-        print(transform)
         orig_dims = img.shape
         return (rggb_transform @ img.reshape(4, -1)).reshape(orig_dims)

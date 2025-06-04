@@ -11,4 +11,4 @@ def test_load_and_Demosaic():
         download_file_requests(file_url, output_file)
 
     rh = RawHandler("example_raw.arw")
-    rh.as_RGB_colorspace(colorspace="AdobeRGB")
+    rh.as_rgb_colorspace(colorspace="AdobeRGB")
