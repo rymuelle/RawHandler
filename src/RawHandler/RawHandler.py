@@ -1,5 +1,5 @@
 import numpy as np
-from colour_demosaicing import demosaicing_CFA_Bayer_Menon2007
+from colour_demosaicing import demosaicing_CFA_Bayer_Menon2007, demosaicing_CFA_Bayer_bilinear
 import rawpy
 
 from RawHandler.utils import make_colorspace_matrix, transform_to_rggb
@@ -17,10 +17,24 @@ class RawHandler:
         self.path = path
         self.rawpy = rawpy.imread(path)
         self.raw = self.rawpy.raw_image_visible
+
         assert self.rawpy.color_desc.decode() == "RGBG", (
             "Only raw files with Bayer patters are supported currently."
         )
-        self.bayer_pattern = self.bayer_pattern_description()
+        
+        bayer_pattern =  self.bayer_pattern_description()
+        self.bayer_pattern = bayer_pattern
+        if bayer_pattern == "RGGB":
+            "Do nothing"
+        elif bayer_pattern == "BGGR":
+            self.raw = self.raw[1:-1, 1:-1]
+        elif bayer_pattern == "GBRG":
+            self.raw = self.raw[1:-1, :]
+        elif bayer_pattern == "GRBG":
+            self.raw = self.raw[:, 1:-1]
+        else: 
+            print(f'{bayer_pattern} not supported.')
+
 
     def bayer_pattern_description(self):
         return "".join(map(lambda idx: "RGBG"[idx], self.rawpy.raw_pattern.flatten()))
@@ -57,10 +71,10 @@ class RawHandler:
 
     def make_bayer_map(self, bayer):
         channel_map = np.zeros_like(bayer)
-        channel_map[0, 0::2, 0::2] = self.rawpy.raw_pattern[0][0]
-        channel_map[0, 0::2, 1::2] = self.rawpy.raw_pattern[0][1]
-        channel_map[0, 1::2, 0::2] = self.rawpy.raw_pattern[1][0]
-        channel_map[0, 1::2, 1::2] = self.rawpy.raw_pattern[1][1]
+        channel_map[0, 0::2, 0::2] = 0#self.rawpy.raw_pattern[0][0]
+        channel_map[0, 0::2, 1::2] = 1#self.rawpy.raw_pattern[0][1]
+        channel_map[0, 1::2, 0::2] = 3#self.rawpy.raw_pattern[1][0]
+        channel_map[0, 1::2, 1::2] = 2#self.rawpy.raw_pattern[1][1]
         return channel_map
 
     def adjust_bayer_bw_levels(self, img=None, dims=None):
@@ -93,25 +107,30 @@ class RawHandler:
         """
         raw = self.input_handler(dims=dims, img=img)
         raw = self.adjust_bayer_bw_levels(raw)
+        def pixel_unshuffle(x, r):
+            C, H, W = x.shape
+            x = x.reshape(C, H // r, r, W // r, r).transpose(0, 2, 4, 1, 3).reshape(C * r ** 2, H // r, W // r)
+            return x
+        four_channel = pixel_unshuffle(raw, 2)
+        return four_channel
+        # def get_matching_index(channel):
+        #     return [
+        #         idx
+        #         for idx in range(len(self.bayer_pattern))
+        #         if self.bayer_pattern[idx] == channel
+        #     ]
 
-        def get_matching_index(channel):
-            return [
-                idx
-                for idx in range(len(self.bayer_pattern))
-                if self.bayer_pattern[idx] == channel
-            ]
-
-        r_idx = get_matching_index("R")
-        g_idx = get_matching_index("G")
-        b_idx = get_matching_index("B")
-        assert (len(r_idx) == 1) and (len(g_idx) == 2) and (len(b_idx) == 1), (
-            "Incorrect number of channels found."
-        )
-        smart_indexing_array = ((0, 0), (0, 1), (1, 0), (1, 1))
-        rggb = np.stack(
-            [raw[0, idxs[1] :: 2, idxs[0] :: 2] for idxs in smart_indexing_array]
-        )
-        return rggb
+        # r_idx = get_matching_index("R")
+        # g_idx = get_matching_index("G")
+        # b_idx = get_matching_index("B")
+        # assert (len(r_idx) == 1) and (len(g_idx) == 2) and (len(b_idx) == 1), (
+        #     "Incorrect number of channels found."
+        # )
+        # smart_indexing_array = ((0, 0), (0, 1), (1, 0), (1, 1))
+        # rggb = np.stack(
+        #     [raw[0, idxs[1] :: 2, idxs[0] :: 2] for idxs in smart_indexing_array]
+        # )
+        #return rggb
 
     def as_rgb(self, dims=None, img=None):
         """
@@ -128,8 +147,8 @@ class RawHandler:
         )
         raw = self.input_handler(dims=dims, img=img)
         raw = self.adjust_bayer_bw_levels(raw)
-        rgb = demosaicing_CFA_Bayer_Menon2007(
-            raw.transpose(1, 2, 0), pattern=self.bayer_pattern
+        rgb = demosaicing_CFA_Bayer_bilinear(
+            raw.transpose(1, 2, 0), pattern="RGGB" #self.bayer_pattern
         )
         return rgb.transpose(2, 0, 1)
 
