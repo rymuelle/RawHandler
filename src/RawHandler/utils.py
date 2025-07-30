@@ -1,6 +1,6 @@
 import requests
 import numpy as np
-
+from itertools import product
 
 def download_file_requests(url, local_filename):
     """
@@ -102,6 +102,12 @@ def make_colorspace_matrix(
     Returns:
         transform (np.array): 3x3 array for rggb data.
     """
+    if colorspace == "identity":
+        xyz_to_colorspace = [
+            [1., 0., 0.],
+            [0., 1., 0.],
+            [0., 0., 1.],
+        ]       
     if colorspace == "sRGB":
         xyz_to_colorspace = [
             [3.2404542, -1.5371385, -0.4985314],
@@ -126,3 +132,39 @@ def make_colorspace_matrix(
     )
     transform = xyz_to_colorspace @ rgb_to_xyz
     return transform
+
+
+def get_exif_data(raw_file_path):
+    import exifread
+    try:
+        with open(raw_file_path, 'rb') as f:
+            tags = exifread.process_file(f)
+            return tags
+    except Exception as e:
+        print(f"Error reading EXIF data from {raw_file_path}: {e}")
+        return None
+
+
+
+
+def get_bounds(M):
+    corners = np.array(list(product([0, 1], repeat=3)))  # 8 RGB corners
+    transformed = corners @ M.T
+    min_vals = transformed.min(axis=0)
+    max_vals = transformed.max(axis=0)
+    return min_vals, max_vals
+
+
+def normalize_adobe_rgb(img, min_vals, max_vals):
+    return (img - min_vals[:, None, None]) / (max_vals - min_vals + 1e-8)[:, None, None]
+
+
+def pixel_unshuffle(x, r):
+    C, H, W = x.shape
+    x = x.reshape(C, H // r, r, W // r, r).transpose(0, 2, 4, 1, 3).reshape(C * r ** 2, H // r, W // r)
+    return x
+
+def pixel_shuffle(x, r):
+    C, H, W = x.shape
+    x = x.reshape(C // r ** 2, r, r, H , W ).transpose(0, 3, 1, 4, 2).reshape(C // r **2, H * r, W * r)
+    return x
