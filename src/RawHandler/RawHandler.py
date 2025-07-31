@@ -1,5 +1,5 @@
 import numpy as np
-from colour_demosaicing import demosaicing_CFA_Bayer_Menon2007, demosaicing_CFA_Bayer_bilinear
+from colour_demosaicing import demosaicing_CFA_Bayer_DDFAPD, demosaicing_CFA_Bayer_bilinear, demosaicing_CFA_Bayer_Malvar2004
 import rawpy
 from typing import Dict, Any, NamedTuple, TypedDict, Optional
 import datetime
@@ -97,7 +97,8 @@ class BaseRawHandler:
     def apply_colorspace_transform(
         self, dims=None,
         colorspace="identity", 
-        xyz_to_colorspace: np.ndarray = None
+        xyz_to_colorspace: np.ndarray = None,
+        clip=True
     ) -> np.ndarray:
         """
         Converts or returns rggb data converted into specified colorspace.
@@ -110,40 +111,30 @@ class BaseRawHandler:
         rggb_transform = transform_to_rggb(transform)
         orig_dims = rggb.shape
         transformed = (rggb_transform @ rggb.reshape(4, -1)).reshape(orig_dims)
+        if clip: transformed = np.clip(transformed, 0, 1)
         return pixel_shuffle(transformed, 2)
 
 
-    def downsize(self, min_preview_size=256):
+    def downsize(self, min_preview_size=256, colorspace='identity') -> np.ndarray:
         H, W = self.raw.shape
         W_steps, H_steps = H // min_preview_size - 1, W // min_preview_size - 1
         steps = min(W_steps, H_steps)
-        rggb = pixel_unshuffle(np.expand_dims(self.raw, 0), 2)[:, ::steps, ::steps]
+        raw = self.apply_colorspace_transform(colorspace=colorspace)[0]
+        rggb = pixel_unshuffle(np.expand_dims(raw, 0), 2)[:, ::steps, ::steps]
         mosaic = pixel_shuffle(rggb, 2)
         return mosaic
 
+    def generate_thumbnail(self, min_preview_size=256, colorspace="sRGB") -> np.ndarray:
+        img = self.downsize(min_preview_size=min_preview_size, colorspace=colorspace)
+        img = demosaicing_CFA_Bayer_bilinear(img)
+        return img
 
-    # def as_rggb(self, dims=None) -> np.ndarray:
-    #     """
-    #     Stacks bayer data into a 4 channel image with half the dimensions.
-    #     """
-    #     raw = self._input_handler(dims=dims)
-    #     raw = self.adjust_bayer_bw_levels(raw)
-
-    #     four_channel = pixel_unshuffle(raw, 2)
-    #     return four_channel
-
-    # def as_rgb(self, dims=None, img: np.ndarray = None) -> np.ndarray:
-    #     """
-    #     Demosaics the underlying bayer data into 3 channel RGB data without color spaces applied.
-    #     """
-    #     raw = self._input_handler(dims=dims, img=img)
-    #     raw = self.adjust_bayer_bw_levels(raw)
-    #     pattern = "".join(map(lambda idx: "RGBG"[idx], self.core_metadata.raw_pattern.flatten()))
-    #     rgb = demosaicing_CFA_Bayer_bilinear(
-    #         raw.transpose(1, 2, 0), pattern=pattern
-    #     )
-    #     return rgb.transpose(2, 0, 1)
-
+    def as_rgb(self,  colorspace="identity", dims=None) -> np.ndarray:
+        bayer = self.apply_colorspace_transform(colorspace=colorspace, dims=dims)
+        rgb = demosaicing_CFA_Bayer_bilinear(bayer)
+        rgb = np.clip(rgb, 0, 1)
+        return rgb.transpose(2, 0, 1)
+    
     # def rgb_colorspace_transform(self, **kwargs) -> np.ndarray:
     #     """
     #     Generates a color space transformation matrix.
