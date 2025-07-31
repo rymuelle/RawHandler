@@ -126,7 +126,6 @@ def make_colorspace_matrix(
             [-0.66667384, 1.61645574, 0.0157683],
             [0.01764248, -0.04277698, 0.94224328],
         ]
-        xyz_to_colorspace = np.linalg.inv(xyz_to_colorspace)
     assert xyz_to_colorspace is not None, (
         "Color space not supported, please supply color space."
     )
@@ -168,3 +167,18 @@ def pixel_shuffle(x, r):
     C, H, W = x.shape
     x = x.reshape(C // r ** 2, r, r, H , W ).transpose(0, 3, 1, 4, 2).reshape(C // r **2, H * r, W * r)
     return x
+
+def get_min_max(rh, colorspace):
+    transform = rh.rgb_colorspace_transform(colorspace=colorspace)
+    min_vals, max_vals  = get_bounds(transform)
+    return min(min_vals), max(max_vals)
+
+def scale_0_to_1(rh, image, colorspace):
+    min_val, max_val = get_min_max(rh, colorspace)
+    img = (image-min_val) / (max_val - min_val)
+    return img
+
+def reverse_scale_0_to_1(rh, image, colorspace):
+    min_val, max_val = get_min_max(rh, colorspace)
+    img = image * (max_val - min_val) + min_val
+    return img
