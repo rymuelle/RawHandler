@@ -17,7 +17,8 @@ classifiers = [
 dependencies = [
     "numpy>=2.2.5",
     "rawpy>=0.24.0",
-    "colour_demosaicing>=0.2.6"
+    "colour_demosaicing>=0.2.6",
+    "exifread>=3.3.1",
     ]
 
 [project.optional-dependencies]
