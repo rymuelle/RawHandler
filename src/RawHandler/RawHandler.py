@@ -1,7 +1,7 @@
 import numpy as np
-from colour_demosaicing import demosaicing_CFA_Bayer_DDFAPD, demosaicing_CFA_Bayer_bilinear, demosaicing_CFA_Bayer_Malvar2004
+from colour_demosaicing import demosaicing_CFA_Bayer_bilinear
 import rawpy
-from typing import NamedTuple, TypedDict, Optional
+from typing import NamedTuple, Optional
 from RawHandler.utils import get_exif_data
 from typing import Literal
 
@@ -121,7 +121,8 @@ class BaseRawHandler:
         rggb_transform = transform_colorspace_to_rggb(transform)
         orig_dims = rggb.shape
         transformed = (rggb_transform @ rggb.reshape(4, -1)).reshape(orig_dims)
-        if clip: transformed = np.clip(transformed, 0, 1)
+        if clip: 
+            transformed = np.clip(transformed, 0, 1)
         return pixel_shuffle(transformed, 2)
 
 
@@ -142,14 +143,16 @@ class BaseRawHandler:
     def as_rgb(self,  colorspace=None, dims=None, demosaicing_func=demosaicing_CFA_Bayer_bilinear, clip=False) -> np.ndarray:
         bayer = self.apply_colorspace_transform(colorspace=colorspace, dims=dims)
         rgb = demosaicing_func(bayer)
-        if clip: rgb = np.clip(rgb, 0, 1)
+        if clip: 
+            rgb = np.clip(rgb, 0, 1)
         return rgb.transpose(2, 0, 1)
     
 
     def as_rggb(self,  colorspace=None, dims=None, clip=False) -> np.ndarray:
         bayer = self.apply_colorspace_transform(colorspace=colorspace, dims=dims)
         rggb = pixel_unshuffle(bayer, 2)
-        if clip:  rggb = np.clip(rggb, 0, 1)
+        if clip:  
+            rggb = np.clip(rggb, 0, 1)
         return rggb
  
 class RawHandler:
