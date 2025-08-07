@@ -203,6 +203,7 @@ def linear_to_srgb(x):
 
 def linear_to_srgb_torch(x):
     import torch
+
     a = 0.055
     threshold = 0.0031308
     low = 12.92 * x
