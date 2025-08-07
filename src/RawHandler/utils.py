@@ -1,6 +1,7 @@
 import requests
 import numpy as np
 from itertools import product
+import torch
 
 def download_file_requests(url, local_filename):
     """
@@ -65,7 +66,7 @@ def align_images(
     return offset
 
 
-def transform_to_rggb(transform):
+def transform_colorspace_to_rggb(transform):
     """
     Transforms 3x3 color space transform to work with rggb color spaces.
     Args:
@@ -182,3 +183,15 @@ def reverse_scale_0_to_1(rh, image, colorspace):
     min_val, max_val = get_min_max(rh, colorspace)
     img = image * (max_val - min_val) + min_val
     return img
+
+def linear_to_srgb(x):
+    a = 0.055
+    return np.where(x <= 0.0031308, 12.92 * x, (1 + a) * np.power(x, 1/2.4) - a)
+
+
+def linear_to_srgb_torch(x):
+    a = 0.055
+    threshold = 0.0031308
+    low = 12.92 * x
+    high = (1 + a) * torch.pow(x.clamp(min=1e-8), 1/2.4) - a
+    return torch.where(x <= threshold, low, high)
