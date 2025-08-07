@@ -17,8 +17,17 @@ classifiers = [
 dependencies = [
     "numpy>=2.2.5",
     "rawpy>=0.24.0",
-    "colour_demosaicing>=0.2.6"
+    "colour_demosaicing>=0.2.6",
+    "exifread>=3.3.1",
     ]
+
+[project.optional-dependencies]
+torch = [
+    "torch>=2.7.0"
+]
+example = [
+    "requests>=2.32.3"
+]
 
 [project.urls]
 "Homepage" = "https://github.com/rymuelle/RawHandler"

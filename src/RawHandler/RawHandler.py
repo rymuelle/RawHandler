@@ -1,46 +1,67 @@
 import numpy as np
-from colour_demosaicing import demosaicing_CFA_Bayer_Menon2007
+from colour_demosaicing import demosaicing_CFA_Bayer_bilinear
 import rawpy
+from typing import NamedTuple, Optional
+from RawHandler.utils import get_exif_data
+from typing import Literal
+
+from RawHandler.utils import (
+    make_colorspace_matrix,
+    transform_colorspace_to_rggb,
+    pixel_unshuffle,
+    pixel_shuffle,
+)
 
 
-class RawHandler:
+# Define a NamedTuple for the core metadata required by BaseRawHandler for processing
+class CoreRawMetadata(NamedTuple):
+    black_level_per_channel: np.ndarray
+    white_level: int
+    rgb_xyz_matrix: np.ndarray
+    raw_pattern: np.ndarray
+    iheight: int
+    iwidth: int
+
+
+class BaseRawHandler:
     """
-    Wraps rawpy to make transforming raw data into useful formats for machine learning easy.
+    Base class for handling raw image pixel data.
 
     Args:
-        path (string): Path to raw file.
+        pixel_array (np.array): A 2D NumPy array representing the raw pixel data.
+        core_metadata (CoreRawMetadata): A NamedTuple containing essential metadata for processing.
+        full_metadata (Optional[FullRawMetadata]): A Dict containing additional, general metadata.
     """
 
-    def __init__(self, path):
-        self.path = path
-        self.rawpy = rawpy.imread(path)
-        self.raw = self.rawpy.raw_image_visible
-        assert self.rawpy.color_desc.decode() == "RGBG", (
-            "Only raw files with Bayer patters are supported currently."
-        )
-        self.bayer_pattern = self.bayer_pattern_description()
+    def __init__(
+        self,
+        pixel_array: np.ndarray,
+        core_metadata: CoreRawMetadata,
+        full_metadata: Optional[dict] = None,
+        colorspace: Literal[
+            "camera", "XYZ", "sRGB", "AdobeRGB", "lin_rec2020"
+        ] = "lin_rec2020",
+    ):
+        if not isinstance(pixel_array, np.ndarray):
+            raise TypeError("pixel_array must be a NumPy array.")
+        if not isinstance(core_metadata, CoreRawMetadata):
+            raise TypeError("core_metadata must be an instance of CoreRawMetadata.")
 
-    def bayer_pattern_description(self):
-        return "".join(map(lambda idx: "RGBG"[idx], self.rawpy.raw_pattern.flatten()))
+        self.raw = pixel_array
+        self.core_metadata = core_metadata
+        self.full_metadata = full_metadata if full_metadata is not None else {}
+        self.colorspace = colorspace
 
-    def remove_masked_pixels(self, img):
-        return img[:, 0 : self.rawpy.sizes.iheight, 0 : self.rawpy.sizes.iwidth]
+    def _remove_masked_pixels(self, img: np.ndarray) -> np.ndarray:
+        """Removes masked pixels from the image based on core_metadata.iheight and core_metadata.iwidth."""
+        return img[:, 0 : self.core_metadata.iheight, 0 : self.core_metadata.iwidth]
 
-    def input_handler(self, dims=None, img=None):
+    def _input_handler(self, dims=None) -> np.ndarray:
         """
-        Handles optional image and crop data.
-
-        Args:
-            image (np.array): Array of structure [C, H, W]. If 'None' returns the raw bayer data with masked pixels trimmed off. (optional)
-            dims (int): Specify dimensions to crop. (Optional)
-        Returns :
-            img (np.array): Array of dimensions [C, H, W]
+        Crops bayer array.
         """
-        if img is None:
-            img = np.expand_dims(self.raw, axis=0)
-            img = self.remove_masked_pixels(img)
-        elif len(img.shape) == 2:
-            img = np.expand_dims(self.raw, axis=0)
+        img = np.expand_dims(self.raw, axis=0)
+        img = self._remove_masked_pixels(img)
         if dims is not None:
             if len(dims) != 4:
                 raise ValueError(
@@ -53,127 +74,169 @@ class RawHandler:
         else:
             return img
 
-    def make_bayer_map(self, bayer):
-        channel_map = np.zeros_like(bayer)
-        channel_map[0, 0::2, 0::2] = self.rawpy.raw_pattern[0][0]
-        channel_map[0, 0::2, 1::2] = self.rawpy.raw_pattern[0][1]
-        channel_map[0, 1::2, 0::2] = self.rawpy.raw_pattern[1][0]
-        channel_map[0, 1::2, 1::2] = self.rawpy.raw_pattern[1][1]
-        return channel_map
-
-    def adjust_bayer_bw_levels(self, img=None, dims=None):
-        img = self.input_handler(img=img, dims=dims)
+    def _adjust_bayer_bw_levels(self, dims=None) -> np.ndarray:
+        """
+        Adjusts black and white levels of Bayer data.
+        """
+        img = self._input_handler(dims=dims)
         img = img.astype(np.float32)
 
-        bayer_map = self.make_bayer_map(img)
+        bayer_map = self._make_bayer_map(img)
         for channel in range(4):
-            img[bayer_map == channel] -= self.rawpy.black_level_per_channel[channel]
-            img[bayer_map == channel] *= 1.0 / (
-                self.rawpy.white_level - self.rawpy.black_level_per_channel[channel]
+            channel_mask = bayer_map == channel
+            img[channel_mask] -= self.core_metadata.black_level_per_channel[channel]
+            img[channel_mask] *= 1.0 / (
+                self.core_metadata.white_level
+                - self.core_metadata.black_level_per_channel[channel]
             )
+        img = np.clip(img, 0, 1)
         return img
 
-    def adjust_bayer_black_levels(self, bayer):
-        bayer_map = self.make_bayer_map(bayer)
-        for channel in range(4):
-            bayer[bayer_map == channel] -= self.rawpy.black_level_per_channel[channel]
-        return bayer
+    def _make_bayer_map(self, bayer: np.ndarray) -> np.ndarray:
+        """Creates a Bayer channel map."""
+        channel_map = np.zeros_like(bayer, dtype=int)
+        channel_map[0, 0::2, 0::2] = 0  # Red
+        channel_map[0, 0::2, 1::2] = 1  # Green (G1)
+        channel_map[0, 1::2, 0::2] = 3  # Green (G2)
+        channel_map[0, 1::2, 1::2] = 2  # Blue
+        return channel_map
 
-    def as_rggb(self, dims=None, img=None):
+    def rgb_colorspace_transform(self, colorspace=None, **kwargs) -> np.ndarray:
         """
-        Stacks bayer data into a 4 channel image with half the dimensions.
-
-        Args:
-            image (np.array): Array of structure [C, H, W]. If 'None' returns the raw bayer data with masked pixels trimmed off. (optional)
-            dims (int): Specify dimensions to crop. (Optional)
-        Returns :
-            rggb (np.array): Cropped and stacked version of the underlying raw data with dimenions [4, H / 2, W / 2].
+        Generates a color space transformation matrix for this image.
         """
-        raw = self.input_handler(dims=dims, img=img)
-        raw = self.adjust_bayer_bw_levels(raw)
+        colorspace = colorspace or self.colorspace
+        if colorspace == "camera":
+            return np.array(
+                [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [0.0, 0.0, 1.0],
+                ]
+            )
+        rgb_to_xyz = np.linalg.inv(self.core_metadata.rgb_xyz_matrix[:3])
+        if colorspace == "XYZ":
+            return rgb_to_xyz
+        transform = make_colorspace_matrix(rgb_to_xyz, colorspace=colorspace, **kwargs)
+        return transform
 
-        def get_matching_index(channel):
-            return [
-                idx
-                for idx in range(len(self.bayer_pattern))
-                if self.bayer_pattern[idx] == channel
-            ]
-
-        r_idx = get_matching_index("R")
-        g_idx = get_matching_index("G")
-        b_idx = get_matching_index("B")
-        assert (len(r_idx) == 1) and (len(g_idx) == 2) and (len(b_idx) == 1), (
-            "Incorrect number of channels found."
-        )
-        smart_indexing_array = ((0, 0), (0, 1), (1, 0), (1, 1))
-        rggb = np.stack(
-            [raw[0, idxs[1] :: 2, idxs[0] :: 2] for idxs in smart_indexing_array]
-        )
-        return rggb
-
-    def as_rgb(self, dims=None, img=None):
+    def apply_colorspace_transform(
+        self,
+        dims=None,
+        xyz_to_colorspace: np.ndarray = None,
+        colorspace=None,
+        clip=False,
+    ) -> np.ndarray:
         """
-        Demosaics the underlying bayer data into 3 channel RGB data without color spaces applied.
-
-        Args:
-            image (np.array): Array of structure [C, H, W]. If 'None' returns the raw bayer data with masked pixels trimmed off. (optional)
-            dims (int): Specify dimensions to crop. (Optional)
-        Returns:
-            rgb (np.array): Cropped, demosaiced data with dimenions [3, H, W ].
+        Converts or returns rggb data converted into specified colorspace.
         """
-        assert self.bayer_pattern in ["RGGB", "BGGR", "GRBG", "GBRG"], (
-            f"{self.bayer_pattern} is not supported for demosaicing."
+        img = self._adjust_bayer_bw_levels(dims=dims)
+        rggb = pixel_unshuffle(img, 2)
+        transform = self.rgb_colorspace_transform(
+            colorspace=colorspace, xyz_to_colorspace=xyz_to_colorspace
         )
-        raw = self.input_handler(dims=dims, img=img)
-        raw = self.adjust_bayer_bw_levels(raw)
-        rgb = demosaicing_CFA_Bayer_Menon2007(
-            raw.transpose(1, 2, 0), pattern=self.bayer_pattern
+        rggb_transform = transform_colorspace_to_rggb(transform)
+        orig_dims = rggb.shape
+        transformed = (rggb_transform @ rggb.reshape(4, -1)).reshape(orig_dims)
+        if clip:
+            transformed = np.clip(transformed, 0, 1)
+        return pixel_shuffle(transformed, 2)
+
+    def downsize(self, min_preview_size=256, colorspace=None, clip=False) -> np.ndarray:
+        H, W = self.raw.shape
+        W_steps, H_steps = H // min_preview_size - 1, W // min_preview_size - 1
+        steps = min(W_steps, H_steps)
+        raw = self.apply_colorspace_transform(colorspace=colorspace, clip=clip)[0]
+        rggb = pixel_unshuffle(np.expand_dims(raw, 0), 2)[:, ::steps, ::steps]
+        mosaic = pixel_shuffle(rggb, 2)
+        return mosaic
+
+    def generate_thumbnail(
+        self,
+        min_preview_size=256,
+        colorspace=None,
+        clip=False,
+        demosaicing_func=demosaicing_CFA_Bayer_bilinear,
+    ) -> np.ndarray:
+        img = self.downsize(
+            min_preview_size=min_preview_size, colorspace=colorspace, clip=clip
         )
+        img = demosaicing_func(img)
+        return img
+
+    def as_rgb(
+        self,
+        colorspace=None,
+        dims=None,
+        demosaicing_func=demosaicing_CFA_Bayer_bilinear,
+        clip=False,
+    ) -> np.ndarray:
+        bayer = self.apply_colorspace_transform(colorspace=colorspace, dims=dims)
+        rgb = demosaicing_func(bayer)
+        if clip:
+            rgb = np.clip(rgb, 0, 1)
         return rgb.transpose(2, 0, 1)
 
-    def as_RGB_colorspace(
-        self, dims=None, img=None, xyz_to_colorspace=None, colorspace=None
-    ):
-        """
-        Converts or returns demosaiced data converted into specified colorspace.
-        Resources: http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
+    def as_rggb(self, colorspace=None, dims=None, clip=False) -> np.ndarray:
+        bayer = self.apply_colorspace_transform(colorspace=colorspace, dims=dims)
+        rggb = pixel_unshuffle(bayer, 2)
+        if clip:
+            rggb = np.clip(rggb, 0, 1)
+        return rggb
 
-        Args:
-            image (np.array): Array of structure [C, H, W]. If 'None' returns the raw bayer data with masked pixels trimmed off. (optional)
-            dims (int): Specify dimensions to crop. (Optional)
-            xyz_to_colorspace (np.array): Specify your own 3x3 matrix to convert to a colorspace. This arguement gets overwritten by the 'colorspace' arguement. (Optional)
-            colorspace (str): Name of predefined colorspace: 'sRGB', 'AdobeRGB', 'lin_rec2020'. (Optional)
-        Returns:
-            rgb (np.array): Cropped, demosaiced, and profiled data with dimenions [3, H, W ].
-        """
-        if img is None:
-            img = self.as_rgb(dims=dims)
-        else:
-            img = self.input_handler(dims=dims, img=img)
-        rgb_to_xyz = np.linalg.inv(self.rawpy.rgb_xyz_matrix[:3])
-        xyz_to_colorspace = None
-        if colorspace == "sRGB":
-            xyz_to_colorspace = [
-                [3.2404542, -1.5371385, -0.4985314],
-                [-0.9692660, 1.8760108, 0.0415560],
-                [0.0556434, -0.2040259, 1.0572252],
-            ]
-        elif colorspace == "AdobeRGB":
-            xyz_to_colorspace = [
-                [2.0413690, -0.5649464, -0.3446944],
-                [-0.9692660, 1.8760108, 0.0415560],
-                [0.0134474, -0.1183897, 1.0154096],
-            ]
-        elif colorspace == "lin_rec2020":
-            xyz_to_colorspace = [
-                [1.71666343, -0.35567332, -0.25336809],
-                [-0.66667384, 1.61645574, 0.0157683],
-                [0.01764248, -0.04277698, 0.94224328],
-            ]
-            xyz_to_colorspace = np.linalg.inv(xyz_to_colorspace)
-        assert xyz_to_colorspace is not None, (
-            "Color space not supported, please supply color space."
+
+class RawHandler:
+    """
+    Factory class to create BaseRawHandler instances from raw image files.
+    This class handles rawpy specific parsing for pixel data and core metadata,
+    and uses exifread for extracting general EXIF metadata.
+
+    Args:
+        path (string): Path to raw file.
+    """
+
+    def __new__(cls, path: str, **kwargs):
+        # Use rawpy for raw pixel data and core processing metadata
+        rawpy_object = rawpy.imread(path)
+        raw_image = rawpy_object.raw_image_visible
+
+        assert rawpy_object.color_desc.decode() == "RGBG", (
+            "Only raw files with Bayer patterns are supported currently."
         )
-        transform = xyz_to_colorspace @ rgb_to_xyz
-        orig_dims = img.shape
-        return (transform @ img.reshape(3, -1)).reshape(orig_dims)
+
+        bayer_pattern = "".join(
+            map(lambda idx: "RGBG"[idx], rawpy_object.raw_pattern.flatten())
+        )
+
+        # Adjust raw_image based on Bayer pattern to align with RGGB
+        CROP_OFFSETS = {
+            "RGGB": (0, 0),
+            "BGGR": (1, 1),
+            "GBRG": (1, 0),
+            "GRBG": (0, 1),
+        }
+
+        dx, dy = CROP_OFFSETS.get(bayer_pattern, (None, None))
+        if dx is None:
+            raise ValueError(f"Unsupported Bayer pattern: {bayer_pattern}")
+        raw_image = raw_image[dy:, dx:]
+
+        # Extract Core Metadata for BaseRawHandler's processing logic
+        core_metadata = CoreRawMetadata(
+            black_level_per_channel=rawpy_object.black_level_per_channel,
+            white_level=rawpy_object.white_level,
+            rgb_xyz_matrix=rawpy_object.rgb_xyz_matrix,
+            raw_pattern=rawpy_object.raw_pattern,
+            iheight=rawpy_object.sizes.iheight,
+            iwidth=rawpy_object.sizes.iwidth,
+        )
+
+        # Extract Full (General) Metadata using exifread
+        metadata = get_exif_data(path)
+
+        return BaseRawHandler(
+            pixel_array=raw_image,
+            core_metadata=core_metadata,
+            full_metadata=metadata,
+            **kwargs,
+        )

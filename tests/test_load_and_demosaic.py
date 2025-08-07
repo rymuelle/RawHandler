@@ -10,5 +10,7 @@ def test_load_and_Demosaic():
     if not os.path.exists(output_file):
         download_file_requests(file_url, output_file)
 
-    rh = RawHandler("example_raw.arw")
-    rh.as_RGB_colorspace(colorspace="AdobeRGB")
+    rh = RawHandler("example_raw.arw", colorspace="sRGB")
+    img = rh.generate_thumbnail(clip=True)
+    assert img.min() >= 0, f"Image value {img.min()} found outside of range 0-1."
+    assert img.max() <= 1, f"Image value {img.max()} found outside of range0-1."
