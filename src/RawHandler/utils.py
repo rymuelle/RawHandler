@@ -3,6 +3,7 @@ import numpy as np
 from itertools import product
 import torch
 
+
 def download_file_requests(url, local_filename):
     """
     Downloads a file from a given URL using the requests library.
@@ -105,10 +106,10 @@ def make_colorspace_matrix(
     """
     if colorspace == "identity":
         xyz_to_colorspace = [
-            [1., 0., 0.],
-            [0., 1., 0.],
-            [0., 0., 1.],
-        ]       
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ]
     if colorspace == "sRGB":
         xyz_to_colorspace = [
             [3.2404542, -1.5371385, -0.4985314],
@@ -136,15 +137,14 @@ def make_colorspace_matrix(
 
 def get_exif_data(raw_file_path):
     import exifread
+
     try:
-        with open(raw_file_path, 'rb') as f:
+        with open(raw_file_path, "rb") as f:
             tags = exifread.process_file(f)
             return tags
     except Exception as e:
         print(f"Error reading EXIF data from {raw_file_path}: {e}")
         return None
-
-
 
 
 def get_bounds(M):
@@ -161,37 +161,50 @@ def normalize_adobe_rgb(img, min_vals, max_vals):
 
 def pixel_unshuffle(x, r):
     C, H, W = x.shape
-    x = x.reshape(C, H // r, r, W // r, r).transpose(0, 2, 4, 1, 3).reshape(C * r ** 2, H // r, W // r)
+    x = (
+        x.reshape(C, H // r, r, W // r, r)
+        .transpose(0, 2, 4, 1, 3)
+        .reshape(C * r**2, H // r, W // r)
+    )
     return x
+
 
 def pixel_shuffle(x, r):
     C, H, W = x.shape
-    x = x.reshape(C // r ** 2, r, r, H , W ).transpose(0, 3, 1, 4, 2).reshape(C // r **2, H * r, W * r)
+    x = (
+        x.reshape(C // r**2, r, r, H, W)
+        .transpose(0, 3, 1, 4, 2)
+        .reshape(C // r**2, H * r, W * r)
+    )
     return x
+
 
 def get_min_max(rh, colorspace):
     transform = rh.rgb_colorspace_transform(colorspace=colorspace)
-    min_vals, max_vals  = get_bounds(transform)
+    min_vals, max_vals = get_bounds(transform)
     return min(min_vals), max(max_vals)
+
 
 def scale_0_to_1(rh, image, colorspace):
     min_val, max_val = get_min_max(rh, colorspace)
-    img = (image-min_val) / (max_val - min_val)
+    img = (image - min_val) / (max_val - min_val)
     return img
+
 
 def reverse_scale_0_to_1(rh, image, colorspace):
     min_val, max_val = get_min_max(rh, colorspace)
     img = image * (max_val - min_val) + min_val
     return img
 
+
 def linear_to_srgb(x):
     a = 0.055
-    return np.where(x <= 0.0031308, 12.92 * x, (1 + a) * np.power(x, 1/2.4) - a)
+    return np.where(x <= 0.0031308, 12.92 * x, (1 + a) * np.power(x, 1 / 2.4) - a)
 
 
 def linear_to_srgb_torch(x):
     a = 0.055
     threshold = 0.0031308
     low = 12.92 * x
-    high = (1 + a) * torch.pow(x.clamp(min=1e-8), 1/2.4) - a
+    high = (1 + a) * torch.pow(x.clamp(min=1e-8), 1 / 2.4) - a
     return torch.where(x <= threshold, low, high)
