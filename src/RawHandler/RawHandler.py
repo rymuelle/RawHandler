@@ -10,6 +10,7 @@ from RawHandler.utils import (
     transform_colorspace_to_rggb,
     pixel_unshuffle,
     pixel_shuffle,
+    safe_crop,
 )
 
 
@@ -117,6 +118,7 @@ class BaseRawHandler:
         rgb_to_xyz = np.linalg.inv(self.core_metadata.rgb_xyz_matrix[:3])
         if colorspace == "XYZ":
             return rgb_to_xyz
+        
         transform = make_colorspace_matrix(rgb_to_xyz, colorspace=colorspace, **kwargs)
         return transform
 
@@ -185,6 +187,8 @@ class BaseRawHandler:
         return rggb
 
 
+
+
 class RawHandler:
     """
     Factory class to create BaseRawHandler instances from raw image files.
@@ -199,7 +203,6 @@ class RawHandler:
         # Use rawpy for raw pixel data and core processing metadata
         rawpy_object = rawpy.imread(path)
         raw_image = rawpy_object.raw_image_visible
-
         assert rawpy_object.color_desc.decode() == "RGBG", (
             "Only raw files with Bayer patterns are supported currently."
         )
@@ -219,7 +222,7 @@ class RawHandler:
         dx, dy = CROP_OFFSETS.get(bayer_pattern, (None, None))
         if dx is None:
             raise ValueError(f"Unsupported Bayer pattern: {bayer_pattern}")
-        raw_image = raw_image[dy:, dx:]
+        raw_image = safe_crop(raw_image, dx=dx, dy=dy)
 
         # Extract Core Metadata for BaseRawHandler's processing logic
         core_metadata = CoreRawMetadata(
