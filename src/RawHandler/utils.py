@@ -91,18 +91,7 @@ def transform_colorspace_to_rggb(transform):
     )
     return new_transform
 
-
-def make_colorspace_matrix(
-    rgb_to_xyz, colorspace="lin_rec2020", xyz_to_colorspace=None
-):
-    """
-    Computes the combination of the rgb to xyz converstion, and a convertion from xyz to the specified colorspace.
-    Args:
-        xyz_to_colorspace (np.array): Specify your own 3x3 matrix to convert to a colorspace. This arguement gets overwritten by the 'colorspace' arguement. (Optional)
-        colorspace (str): Name of predefined colorspace: 'sRGB', 'AdobeRGB', 'lin_rec2020'. (Default 'lin_rec2020')
-    Returns:
-        transform (np.array): 3x3 array for rggb data.
-    """
+def get_xyz_to_colorspace(colorspace):
     if colorspace == "identity":
         xyz_to_colorspace = [
             [1.0, 0.0, 0.0],
@@ -130,6 +119,26 @@ def make_colorspace_matrix(
     assert xyz_to_colorspace is not None, (
         "Color space not supported, please supply color space."
     )
+
+    xyz_to_colorspace = np.array(xyz_to_colorspace)
+    return xyz_to_colorspace
+
+def get_colorspace_to_xyz(colorspace):
+    xyz_to_colorspace = get_xyz_to_colorspace(xyz_to_colorspace)
+    return np.linalg.inv(xyz_to_colorspace)
+
+def make_colorspace_matrix(
+    rgb_to_xyz, colorspace="lin_rec2020", xyz_to_colorspace=None
+):
+    """
+    Computes the combination of the rgb to xyz converstion, and a convertion from xyz to the specified colorspace.
+    Args:
+        xyz_to_colorspace (np.array): Specify your own 3x3 matrix to convert to a colorspace. This arguement gets overwritten by the 'colorspace' arguement. (Optional)
+        colorspace (str): Name of predefined colorspace: 'sRGB', 'AdobeRGB', 'lin_rec2020'. (Default 'lin_rec2020')
+    Returns:
+        transform (np.array): 3x3 array for rggb data.
+    """
+    xyz_to_colorspace = xyz_to_colorspace or get_xyz_to_colorspace(colorspace)
     transform = xyz_to_colorspace @ rgb_to_xyz
     return transform
 
