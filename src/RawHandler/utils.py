@@ -218,3 +218,15 @@ def linear_to_srgb_torch(x):
     low = 12.92 * x
     high = (1 + a) * torch.pow(x.clamp(min=1e-8), 1 / 2.4) - a
     return torch.where(x <= threshold, low, high)
+
+
+def safe_crop(img: np.ndarray, dx: int = 0, dy: int = 0) -> np.ndarray:
+    h, w = img.shape[:2]
+
+    # Compute slice boundaries explicitly
+    y0 = dy
+    y1 = h - dy if dy > 0 else h
+    x0 = dx
+    x1 = w - dx if dx > 0 else w
+
+    return img[y0:y1, x0:x1]
