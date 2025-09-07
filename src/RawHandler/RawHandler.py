@@ -2,7 +2,7 @@ import numpy as np
 from colour_demosaicing import demosaicing_CFA_Bayer_bilinear
 import rawpy
 from typing import NamedTuple, Optional
-from RawHandler.utils import get_exif_data
+from RawHandler.utils import get_exif_data, sparse_representation
 from typing import Literal
 
 from RawHandler.utils import (
@@ -186,9 +186,13 @@ class BaseRawHandler:
             rggb = np.clip(rggb, 0, 1)
         return rggb
 
-
-
-
+    def as_sparse(self, colorspace=None, dims=None, clip=False, pattern="RGGB", cfa_type="bayer") -> np.ndarray:
+        bayer = self.apply_colorspace_transform(colorspace=colorspace, dims=dims)
+        sparse = sparse_representation(bayer[0],  pattern=pattern, cfa_type=cfa_type)
+        if clip:
+            sparse = np.clip(sparse, 0, 1)
+        return sparse
+    
 class RawHandler:
     """
     Factory class to create BaseRawHandler instances from raw image files.
