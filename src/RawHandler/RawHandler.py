@@ -214,13 +214,12 @@ class RawHandler:
         bayer_pattern = "".join(
             map(lambda idx: "RGBG"[idx], rawpy_object.raw_pattern.flatten())
         )
-
         # Adjust raw_image based on Bayer pattern to align with RGGB
         CROP_OFFSETS = {
             "RGGB": (0, 0),
             "BGGR": (1, 1),
-            "GBRG": (1, 0),
-            "GRBG": (0, 1),
+            "GBRG": (0, 1),
+            "GRBG": (1, 0),
         }
 
         dx, dy = CROP_OFFSETS.get(bayer_pattern, (None, None))
