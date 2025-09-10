@@ -227,7 +227,11 @@ class RawHandler:
         if dx is None:
             raise ValueError(f"Unsupported Bayer pattern: {bayer_pattern}")
         raw_image = safe_crop(raw_image, dx=dx, dy=dy)
-
+        # Ensure sensor shape is even
+        if raw_image.shape[0] % 2 != 0:
+            raw_image = raw_image[:-1]
+        if raw_image.shape[1] % 2 != 0:
+            raw_image = raw_image[:,:-1]
         # Extract Core Metadata for BaseRawHandler's processing logic
         core_metadata = CoreRawMetadata(
             black_level_per_channel=rawpy_object.black_level_per_channel,
