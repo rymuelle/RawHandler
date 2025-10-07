@@ -1,9 +1,9 @@
-import requests
 import numpy as np
 from itertools import product
 
 
 def download_file_requests(url, local_filename):
+    import requests
     """
     Downloads a file from a given URL using the requests library.
 
