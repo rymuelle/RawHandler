@@ -15,7 +15,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "numpy>=2.2.5",
+    "numpy>=1.24.0",
     "rawpy>=0.24.0",
     "colour_demosaicing>=0.2.6",
     "exifread>=3.3.1",
