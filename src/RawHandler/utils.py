@@ -4,6 +4,7 @@ from itertools import product
 
 def download_file_requests(url, local_filename):
     import requests
+
     """
     Downloads a file from a given URL using the requests library.
 
@@ -91,6 +92,7 @@ def transform_colorspace_to_rggb(transform):
     )
     return new_transform
 
+
 def get_xyz_to_colorspace(colorspace):
     if colorspace == "identity":
         xyz_to_colorspace = [
@@ -123,9 +125,11 @@ def get_xyz_to_colorspace(colorspace):
     xyz_to_colorspace = np.array(xyz_to_colorspace)
     return xyz_to_colorspace
 
+
 def get_colorspace_to_xyz(colorspace):
     xyz_to_colorspace = get_xyz_to_colorspace(colorspace)
     return np.linalg.inv(xyz_to_colorspace)
+
 
 def make_colorspace_matrix(
     rgb_to_xyz, colorspace="lin_rec2020", xyz_to_colorspace=None
@@ -256,7 +260,7 @@ def sparse_representation(cfa, pattern="RGGB", cfa_type="bayer"):
             "GRBG": np.array([["G", "R"], ["B", "G"]]),
             "GBRG": np.array([["G", "B"], ["R", "G"]]),
         }
-        cmap = {"R":0, "G":1, "B":2}
+        cmap = {"R": 0, "G": 1, "B": 2}
         mask = masks[pattern]
 
         for i in range(2):
@@ -267,18 +271,20 @@ def sparse_representation(cfa, pattern="RGGB", cfa_type="bayer"):
     elif cfa_type == "xtrans":
         sparse = np.zeros((3, H, W), dtype=cfa.dtype)
 
-        xtrans_pattern = np.array([
-            ["G","B","R","G","R","B"],
-            ["R","G","G","B","G","G"],
-            ["B","G","G","R","G","G"],
-            ["G","R","B","G","B","R"],
-            ["B","G","G","R","G","G"],
-            ["R","G","G","B","G","G"],
-        ])
-        cmap = {"R":0, "G":1, "B":2}
+        xtrans_pattern = np.array(
+            [
+                ["G", "B", "R", "G", "R", "B"],
+                ["R", "G", "G", "B", "G", "G"],
+                ["B", "G", "G", "R", "G", "G"],
+                ["G", "R", "B", "G", "B", "R"],
+                ["B", "G", "G", "R", "G", "G"],
+                ["R", "G", "G", "B", "G", "G"],
+            ]
+        )
+        cmap = {"R": 0, "G": 1, "B": 2}
 
         for i in range(6):
             for j in range(6):
                 ch = cmap[xtrans_pattern[i, j]]
                 sparse[ch, i::6, j::6] = cfa[i::6, j::6]
-    return sparse  
+    return sparse
