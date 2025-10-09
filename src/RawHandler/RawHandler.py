@@ -2,7 +2,7 @@ import numpy as np
 from colour_demosaicing import demosaicing_CFA_Bayer_bilinear
 import rawpy
 from typing import NamedTuple, Optional
-from RawHandler.utils import get_exif_data
+from RawHandler.utils import get_exif_data, sparse_representation
 from typing import Literal
 
 from RawHandler.utils import (
@@ -10,6 +10,7 @@ from RawHandler.utils import (
     transform_colorspace_to_rggb,
     pixel_unshuffle,
     pixel_shuffle,
+    safe_crop,
 )
 
 
@@ -117,6 +118,7 @@ class BaseRawHandler:
         rgb_to_xyz = np.linalg.inv(self.core_metadata.rgb_xyz_matrix[:3])
         if colorspace == "XYZ":
             return rgb_to_xyz
+
         transform = make_colorspace_matrix(rgb_to_xyz, colorspace=colorspace, **kwargs)
         return transform
 
@@ -184,6 +186,15 @@ class BaseRawHandler:
             rggb = np.clip(rggb, 0, 1)
         return rggb
 
+    def as_sparse(
+        self, colorspace=None, dims=None, clip=False, pattern="RGGB", cfa_type="bayer"
+    ) -> np.ndarray:
+        bayer = self.apply_colorspace_transform(colorspace=colorspace, dims=dims)
+        sparse = sparse_representation(bayer[0], pattern=pattern, cfa_type=cfa_type)
+        if clip:
+            sparse = np.clip(sparse, 0, 1)
+        return sparse
+
 
 class RawHandler:
     """
@@ -199,7 +210,6 @@ class RawHandler:
         # Use rawpy for raw pixel data and core processing metadata
         rawpy_object = rawpy.imread(path)
         raw_image = rawpy_object.raw_image_visible
-
         assert rawpy_object.color_desc.decode() == "RGBG", (
             "Only raw files with Bayer patterns are supported currently."
         )
@@ -207,20 +217,23 @@ class RawHandler:
         bayer_pattern = "".join(
             map(lambda idx: "RGBG"[idx], rawpy_object.raw_pattern.flatten())
         )
-
         # Adjust raw_image based on Bayer pattern to align with RGGB
         CROP_OFFSETS = {
             "RGGB": (0, 0),
             "BGGR": (1, 1),
-            "GBRG": (1, 0),
-            "GRBG": (0, 1),
+            "GBRG": (0, 1),
+            "GRBG": (1, 0),
         }
 
         dx, dy = CROP_OFFSETS.get(bayer_pattern, (None, None))
         if dx is None:
             raise ValueError(f"Unsupported Bayer pattern: {bayer_pattern}")
-        raw_image = raw_image[dy:, dx:]
-
+        raw_image = safe_crop(raw_image, dx=dx, dy=dy)
+        # Ensure sensor shape is even
+        if raw_image.shape[0] % 2 != 0:
+            raw_image = raw_image[:-1]
+        if raw_image.shape[1] % 2 != 0:
+            raw_image = raw_image[:, :-1]
         # Extract Core Metadata for BaseRawHandler's processing logic
         core_metadata = CoreRawMetadata(
             black_level_per_channel=rawpy_object.black_level_per_channel,

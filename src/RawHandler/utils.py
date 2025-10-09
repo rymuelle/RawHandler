@@ -1,9 +1,10 @@
-import requests
 import numpy as np
 from itertools import product
 
 
 def download_file_requests(url, local_filename):
+    import requests
+
     """
     Downloads a file from a given URL using the requests library.
 
@@ -92,17 +93,7 @@ def transform_colorspace_to_rggb(transform):
     return new_transform
 
 
-def make_colorspace_matrix(
-    rgb_to_xyz, colorspace="lin_rec2020", xyz_to_colorspace=None
-):
-    """
-    Computes the combination of the rgb to xyz converstion, and a convertion from xyz to the specified colorspace.
-    Args:
-        xyz_to_colorspace (np.array): Specify your own 3x3 matrix to convert to a colorspace. This arguement gets overwritten by the 'colorspace' arguement. (Optional)
-        colorspace (str): Name of predefined colorspace: 'sRGB', 'AdobeRGB', 'lin_rec2020'. (Default 'lin_rec2020')
-    Returns:
-        transform (np.array): 3x3 array for rggb data.
-    """
+def get_xyz_to_colorspace(colorspace):
     if colorspace == "identity":
         xyz_to_colorspace = [
             [1.0, 0.0, 0.0],
@@ -130,6 +121,28 @@ def make_colorspace_matrix(
     assert xyz_to_colorspace is not None, (
         "Color space not supported, please supply color space."
     )
+
+    xyz_to_colorspace = np.array(xyz_to_colorspace)
+    return xyz_to_colorspace
+
+
+def get_colorspace_to_xyz(colorspace):
+    xyz_to_colorspace = get_xyz_to_colorspace(colorspace)
+    return np.linalg.inv(xyz_to_colorspace)
+
+
+def make_colorspace_matrix(
+    rgb_to_xyz, colorspace="lin_rec2020", xyz_to_colorspace=None
+):
+    """
+    Computes the combination of the rgb to xyz converstion, and a convertion from xyz to the specified colorspace.
+    Args:
+        xyz_to_colorspace (np.array): Specify your own 3x3 matrix to convert to a colorspace. This arguement gets overwritten by the 'colorspace' arguement. (Optional)
+        colorspace (str): Name of predefined colorspace: 'sRGB', 'AdobeRGB', 'lin_rec2020'. (Default 'lin_rec2020')
+    Returns:
+        transform (np.array): 3x3 array for rggb data.
+    """
+    xyz_to_colorspace = xyz_to_colorspace or get_xyz_to_colorspace(colorspace)
     transform = xyz_to_colorspace @ rgb_to_xyz
     return transform
 
@@ -209,3 +222,69 @@ def linear_to_srgb_torch(x):
     low = 12.92 * x
     high = (1 + a) * torch.pow(x.clamp(min=1e-8), 1 / 2.4) - a
     return torch.where(x <= threshold, low, high)
+
+
+def safe_crop(img: np.ndarray, dx: int = 0, dy: int = 0) -> np.ndarray:
+    h, w = img.shape[:2]
+
+    # Compute slice boundaries explicitly
+    y0 = dy
+    y1 = h - dy if dy > 0 else h
+    x0 = dx
+    x1 = w - dx if dx > 0 else w
+
+    return img[y0:y1, x0:x1]
+
+
+def sparse_representation(cfa, pattern="RGGB", cfa_type="bayer"):
+    """
+    Make a sparse representation of a CFA.
+
+    Args:
+        cfa: numpy array (H, W), single-channel CFA image.
+        pattern: CFA pattern string, one of {"RGGB","BGGR","GRBG","GBRG"} for Bayer.
+        cfa_type: "bayer" or "xtrans".
+
+    Returns:
+        rgb: numpy array (3, H, W, 3).
+    """
+    H, W = cfa.shape
+
+    if cfa_type == "bayer":
+        # Generate sparse R, G, B channels
+        sparse = np.zeros((3, H, W), dtype=cfa.dtype)
+
+        masks = {
+            "RGGB": np.array([["R", "G"], ["G", "B"]]),
+            "BGGR": np.array([["B", "G"], ["G", "R"]]),
+            "GRBG": np.array([["G", "R"], ["B", "G"]]),
+            "GBRG": np.array([["G", "B"], ["R", "G"]]),
+        }
+        cmap = {"R": 0, "G": 1, "B": 2}
+        mask = masks[pattern]
+
+        for i in range(2):
+            for j in range(2):
+                ch = cmap[mask[i, j]]
+                sparse[ch, i::2, j::2] = cfa[i::2, j::2]
+
+    elif cfa_type == "xtrans":
+        sparse = np.zeros((3, H, W), dtype=cfa.dtype)
+
+        xtrans_pattern = np.array(
+            [
+                ["G", "B", "R", "G", "R", "B"],
+                ["R", "G", "G", "B", "G", "G"],
+                ["B", "G", "G", "R", "G", "G"],
+                ["G", "R", "B", "G", "B", "R"],
+                ["B", "G", "G", "R", "G", "G"],
+                ["R", "G", "G", "B", "G", "G"],
+            ]
+        )
+        cmap = {"R": 0, "G": 1, "B": 2}
+
+        for i in range(6):
+            for j in range(6):
+                ch = cmap[xtrans_pattern[i, j]]
+                sparse[ch, i::6, j::6] = cfa[i::6, j::6]
+    return sparse
