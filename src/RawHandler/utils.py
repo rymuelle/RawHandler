@@ -124,7 +124,7 @@ def get_xyz_to_colorspace(colorspace):
     return xyz_to_colorspace
 
 def get_colorspace_to_xyz(colorspace):
-    xyz_to_colorspace = get_xyz_to_colorspace(xyz_to_colorspace)
+    xyz_to_colorspace = get_xyz_to_colorspace(colorspace)
     return np.linalg.inv(xyz_to_colorspace)
 
 def make_colorspace_matrix(
@@ -245,7 +245,6 @@ def sparse_representation(cfa, pattern="RGGB", cfa_type="bayer"):
         rgb: numpy array (3, H, W, 3).
     """
     H, W = cfa.shape
-    rgb = np.zeros((H, W, 3), dtype=cfa.dtype)
 
     if cfa_type == "bayer":
         # Generate sparse R, G, B channels
