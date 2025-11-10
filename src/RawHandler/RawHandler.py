@@ -20,6 +20,7 @@ class CoreRawMetadata(NamedTuple):
     white_level: int
     rgb_xyz_matrix: np.ndarray
     raw_pattern: np.ndarray
+    camera_white_balance: np.ndarray
     iheight: int
     iwidth: int
 
@@ -75,7 +76,7 @@ class BaseRawHandler:
         else:
             return img
 
-    def _adjust_bayer_bw_levels(self, dims=None) -> np.ndarray:
+    def _adjust_bayer_bw_levels(self, dims=None, clip=False) -> np.ndarray:
         """
         Adjusts black and white levels of Bayer data.
         """
@@ -90,7 +91,8 @@ class BaseRawHandler:
                 self.core_metadata.white_level
                 - self.core_metadata.black_level_per_channel[channel]
             )
-        img = np.clip(img, 0, 1)
+        if clip:
+            img = np.clip(img, 0, 1)
         return img
 
     def _make_bayer_map(self, bayer: np.ndarray) -> np.ndarray:
@@ -240,6 +242,7 @@ class RawHandler:
             white_level=rawpy_object.white_level,
             rgb_xyz_matrix=rawpy_object.rgb_xyz_matrix,
             raw_pattern=rawpy_object.raw_pattern,
+            camera_white_balance=np.array(rawpy_object.camera_whitebalance),
             iheight=rawpy_object.sizes.iheight,
             iwidth=rawpy_object.sizes.iwidth,
         )
