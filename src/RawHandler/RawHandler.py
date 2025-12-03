@@ -58,6 +58,22 @@ class BaseRawHandler:
         """Removes masked pixels from the image based on core_metadata.iheight and core_metadata.iwidth."""
         return img[:, 0 : self.core_metadata.iheight, 0 : self.core_metadata.iwidth]
 
+    def flip(self, axis=1):
+        raw = np.flip(self.raw, axis=axis)
+        if axis == 1:
+            self.raw = safe_crop(raw, dx=1, dy=0)
+        else:
+            self.raw = safe_crop(raw, dx=0, dy=1)
+
+    def rotate(self, k=1):
+        raw = np.rot90(self.raw, k=k)
+        if k == 1:
+            self.raw = safe_crop(raw, dx=0, dy=1)
+        if k == 2:
+            self.raw = safe_crop(raw, dx=1, dy=1)
+        if k ==3:
+            self.raw = safe_crop(raw, dx=1, dy=0)
+       
     def _input_handler(self, dims=None) -> np.ndarray:
         """
         Crops bayer array.
