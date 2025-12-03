@@ -1,8 +1,10 @@
 import random
 from torch.utils.data import Dataset
+import torch
 
 from RawHandler.RawHandler import RawHandler
-from RawHandler.utils import align_images
+
+import re
 
 
 class RawDataset(Dataset):
@@ -25,8 +27,8 @@ class RawDataset(Dataset):
         # Crop and align
         H, W = noisy_rh.raw.shape[-2:]
         half_crop = self.crop_size // 2
-        H_center = random.randint(0 + half_crop, H - half_crop)
-        W_center = random.randint(0 + half_crop, W - half_crop)
+        H_center = random.randint(0 + half_crop * 2, H - half_crop * 2)
+        W_center = random.randint(0 + half_crop * 2, W - half_crop * 2)
         crop = (
             H_center - half_crop,
             H_center + half_crop,
@@ -36,16 +38,33 @@ class RawDataset(Dataset):
         if self.offsets is None:
             offset = (0, 0, 0, 0)
         else:
-            offset = self.offsets[idx]
-        offset = align_images(noisy_rh, gt_rh, crop, offset=(0, 0, 0, 0))
+            offset = self.offsets[idx][0][0]
 
         # Adjust exposure
-        noisy_rggb = noisy_rh.as_rggb(dims=crop)
-        noisy_rgb = noisy_rh.as_rgb(dims=crop)
-        clean_rgb = gt_rh.as_rgb(dims=crop)
+        gain = (
+            noisy_rh.adjust_bayer_bw_levels(dims=crop).mean()
+            / gt_rh.adjust_bayer_bw_levels(dims=crop).mean()
+        )
+        gt_rh.gain = gain
+
+        # offset = align_images(noisy_rh, gt_rh, crop, offset=offset, step_sizes=[2])
+
+        noisy_rggb = noisy_rh.as_rggb_colorspace(dims=crop, colorspace="AdobeRGB")
+        noisy_rgb = noisy_rh.as_rgb_colorspace(dims=crop, colorspace="AdobeRGB")
+        clean_rgb = gt_rh.as_rgb_colorspace(dims=crop + offset, colorspace="AdobeRGB")
+
+        iso = re.findall("_ISO([0-9]+)_", noisy_file)
+        if len(iso) == 1:
+            iso = int(iso[0])
+        else:
+            iso = -100
+
+        iso_conditioning = iso / 65535
 
         if self.transform:
-            noisy_rggb = self.transform(noisy_rggb)
-            noisy_rgb = self.transform(noisy_rgb)
-            clean_rgb = self.transform(clean_rgb)
-        return noisy_rggb, noisy_rgb, clean_rgb, offset
+            noisy_rggb = self.transform(noisy_rggb.transpose(1, 2, 0))
+            noisy_rgb = self.transform(noisy_rgb.transpose(1, 2, 0))
+            clean_rgb = self.transform(clean_rgb.transpose(1, 2, 0))
+            iso_conditioning = torch.tensor([iso_conditioning])
+
+        return noisy_rggb, noisy_rgb, clean_rgb, offset, iso_conditioning

@@ -58,7 +58,7 @@ pip install .
 
 ---
 
-## 📘 Example
+## Example
 
 A simple demo notebook is available:
 
@@ -83,5 +83,3 @@ Special thanks to the authors of **RawNIND**:
 > Brummer, Benoit; De Vleeschouwer, Christophe, 2025.
 > *Raw Natural Image Noise Dataset.*
 > [https://doi.org/10.14428/DVN/DEQCIM](https://doi.org/10.14428/DVN/DEQCIM), Open Data @ UCLouvain, V1.
-
-\
