@@ -71,9 +71,9 @@ class BaseRawHandler:
             self.raw = safe_crop(raw, dx=0, dy=1)
         if k == 2:
             self.raw = safe_crop(raw, dx=1, dy=1)
-        if k ==3:
+        if k == 3:
             self.raw = safe_crop(raw, dx=1, dy=0)
-       
+
     def _input_handler(self, dims=None) -> np.ndarray:
         """
         Crops bayer array.
