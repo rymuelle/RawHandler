@@ -1,6 +1,6 @@
 [project]
 name = "RawHandler" 
-version = "0.0.3"
+version = "0.1.0"
 description = "A basic library to handle camera raw files for use in machine learning. Built on rawpy and cv2."
 authors = [
     { name = "Ryan Mueller"},
