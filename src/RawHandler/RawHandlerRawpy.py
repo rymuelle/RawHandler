@@ -47,10 +47,10 @@ class BaseRawHandlerRawpy:
         self.core_metadata = core_metadata
         self.full_metadata = full_metadata if full_metadata is not None else {}
         self.colorspace = colorspace
-        self.xyz_linear = None
+        self.camera_linear = None
 
     def compute_linear(self):
-        xyz_linear = (
+        camera_linear = (
             self.rawpy_object.postprocess(
                 output_color=rawpy.ColorSpace.XYZ,
                 no_auto_bright=True,
@@ -61,14 +61,18 @@ class BaseRawHandlerRawpy:
                 output_bps=16,
             )
             / 65535
-        )
-        self.xyz_linear = xyz_linear.transpose(2, 0, 1)
+        ).transpose(2, 0, 1)
+    
+        orig_dims = camera_linear.shape
+        rgb_to_xyz = self.core_metadata.rgb_xyz_matrix[:3]
+        camera_linear = (rgb_to_xyz @ camera_linear.reshape(3, -1)).reshape(orig_dims)
+        self.camera_linear = camera_linear
 
     def _input_handler(self, dims=None, safe_crop=0) -> np.ndarray:
         """
         Crops linear array.
         """
-        if self.xyz_linear is None:
+        if self.camera_linear is None:
             self.compute_linear()
         if dims is not None:
             h1, h2, w1, w2 = dims
@@ -76,30 +80,30 @@ class BaseRawHandlerRawpy:
                 h1, h2, w1, w2 = list(
                     map(lambda x: x - x % safe_crop, [h1, h2, w1, w2])
                 )
-            return self.xyz_linear[:, h1:h2, w1:w2]
+            return self.camera_linear[:, h1:h2, w1:w2]
         else:
-            return self.xyz_linear
+            return self.camera_linear
 
     def rgb_colorspace_transform(self, colorspace=None, **kwargs) -> np.ndarray:
         """
         Generates a color space transformation matrix for this image.
         """
         colorspace = colorspace or self.colorspace
-
-        rgb_to_xyz = np.array(
-            [
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                [0.0, 0.0, 1.0],
-            ]
-        )
-
+        if colorspace == "camera":
+            return np.array(
+                [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [0.0, 0.0, 1.0],
+                ]
+            )
+        rgb_to_xyz = np.linalg.inv(self.core_metadata.rgb_xyz_matrix[:3])
         if colorspace == "XYZ":
             return rgb_to_xyz
 
         transform = make_colorspace_matrix(rgb_to_xyz, colorspace=colorspace, **kwargs)
         return transform
-
+        
     def apply_colorspace_transform(
         self,
         dims=None,
@@ -111,12 +115,12 @@ class BaseRawHandlerRawpy:
         """
         Converts or returns linear data converted into specified colorspace.
         """
-        xyz_linear = self._input_handler(dims=dims, safe_crop=safe_crop)
+        camera_linear = self._input_handler(dims=dims, safe_crop=safe_crop)
         rgb_transform = self.rgb_colorspace_transform(
             colorspace=colorspace, xyz_to_colorspace=xyz_to_colorspace
         )
-        orig_dims = xyz_linear.shape
-        transformed = (rgb_transform @ xyz_linear.reshape(3, -1)).reshape(orig_dims)
+        orig_dims = camera_linear.shape
+        transformed = (rgb_transform @ camera_linear.reshape(3, -1)).reshape(orig_dims)
         if clip:
             transformed = np.clip(transformed, 0, 1)
         return transformed
@@ -124,7 +128,7 @@ class BaseRawHandlerRawpy:
     def downsize(
         self, min_preview_size=256, colorspace=None, clip=False, safe_crop=0
     ) -> np.ndarray:
-        _, H, W = self.xyz_linear.shape
+        _, H, W = self.camera_linear.shape
         W_steps, H_steps = H // min_preview_size - 1, W // min_preview_size - 1
         steps = min(W_steps, H_steps)
         c_first_linear = self.apply_colorspace_transform(
