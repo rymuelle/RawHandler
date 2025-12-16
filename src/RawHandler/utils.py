@@ -235,6 +235,7 @@ def safe_crop(img: np.ndarray, dx: int = 0, dy: int = 0) -> np.ndarray:
 
     return img[y0:y1, x0:x1]
 
+
 def sparse_representation_three_channel(image, pattern="RGGB", cfa_type="bayer"):
     """
     Make a sparse representation of a C, H, W image.
@@ -287,7 +288,6 @@ def sparse_representation_three_channel(image, pattern="RGGB", cfa_type="bayer")
                 ch = cmap[xtrans_pattern[i, j]]
                 sparse[ch, i::6, j::6] = image[ch, i::6, j::6]
     return sparse
-
 
 
 def sparse_representation(cfa, pattern="RGGB", cfa_type="bayer"):
