@@ -22,7 +22,7 @@ def get_ISO(metadata):
     ]
 
     exif = metadata.exifData()
-
+    val = -1
     for tag in search_tags:
         if tag in exif:
             try:
