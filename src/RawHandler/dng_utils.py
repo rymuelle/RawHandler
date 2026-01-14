@@ -230,11 +230,9 @@ def to_dng(rh, filepath, uint_img=None):
 
     is_CFA = True if len(uint_img.shape) == 2 else False
     if is_CFA:
-        samples_per_pixel = 1
         # 32803 is the code for Color Filter Array
         photometric = 32803
     else:
-        samples_per_pixel = 3
         # 34892 for Linear Raw (or 1 for BlackIsZero)
         photometric = 34892
     #   t.set(Tag.BitsPerSample, [bpp, bpp, bpp]) # 3 channels for RGB
