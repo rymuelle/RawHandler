@@ -137,7 +137,6 @@ def copy_exif_to_dng(rh):
     def long_tag(tag, exif_key):
         if exif_key in exifData:
             val = int(exifData[exif_key].toInt64())
-            print(val)
             tags.append((tag, 4, 1, val, True))
 
     def rational_tag(tag, exif_key, scale=1):
@@ -231,7 +230,6 @@ def to_dng(rh, filepath, uint_img=None):
     #   t.set(Tag.BlackLevel,[0,0,0])
     #   t.set(Tag.WhiteLevel, [65535, 65535, 65535])
     tags = []
-    print(photometric)
     # Basic Geometry
     height, width = uint_img.shape[:2]
     
@@ -255,7 +253,6 @@ def to_dng(rh, filepath, uint_img=None):
     # Type 10 = SRATIONAL. Count = 9 elements (each is a [num, den] pair)
     ccm1 = convert_color_matrix(rh.core_metadata.rgb_xyz_matrix[:3])
     ccm1_flat = np.array(ccm1).flatten().tolist()
-    print(ccm1_flat)
     tags.append((50721, 10, 9, np.array(ccm1_flat, dtype=np.int32), True))
 
     # AsShotNeutral (Tag 50728)
@@ -313,7 +310,6 @@ def to_dng(rh, filepath, uint_img=None):
     tags.append((50723, 3, 1, 21, True))
 
     exif_tags = copy_exif_to_dng(rh)
-    print(uint_img.shape)
     # 4. Save the file
     planarconfig = None if is_CFA else 1
     tifffile.imwrite(
