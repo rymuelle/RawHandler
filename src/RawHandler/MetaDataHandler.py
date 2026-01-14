@@ -29,6 +29,7 @@ def get_ISO(metadata):
                 val = exif[tag].print()
                 if val and val != 65535:
                     return float(val)
-            except:
+            except Exception as e:
+                print(e)
                 val = -1
     return val
