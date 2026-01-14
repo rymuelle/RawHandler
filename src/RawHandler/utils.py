@@ -236,6 +236,60 @@ def safe_crop(img: np.ndarray, dx: int = 0, dy: int = 0) -> np.ndarray:
     return img[y0:y1, x0:x1]
 
 
+def sparse_representation_three_channel(image, pattern="RGGB", cfa_type="bayer"):
+    """
+    Make a sparse representation of a C, H, W image.
+
+    Args:
+        image: numpy array (3, H, W) image.
+        pattern: CFA pattern string, one of {"RGGB","BGGR","GRBG","GBRG"} for Bayer.
+        cfa_type: "bayer" or "xtrans".
+
+    Returns:
+        rgb: numpy array (3, H, W, 3).
+    """
+    C, H, W = image.shape
+
+    if cfa_type == "bayer":
+        # Generate sparse R, G, B channels
+        sparse = np.zeros((C, H, W), dtype=image.dtype)
+
+        masks = {
+            "RGGB": np.array([["R", "G"], ["G", "B"]]),
+            "BGGR": np.array([["B", "G"], ["G", "R"]]),
+            "GRBG": np.array([["G", "R"], ["B", "G"]]),
+            "GBRG": np.array([["G", "B"], ["R", "G"]]),
+        }
+        cmap = {"R": 0, "G": 1, "B": 2}
+        mask = masks[pattern]
+
+        for i in range(2):
+            for j in range(2):
+                ch = cmap[mask[i, j]]
+                sparse[ch, i::2, j::2] = image[ch, i::2, j::2]
+
+    elif cfa_type == "xtrans":
+        sparse = np.zeros((3, H, W), dtype=image.dtype)
+
+        xtrans_pattern = np.array(
+            [
+                ["G", "B", "R", "G", "R", "B"],
+                ["R", "G", "G", "B", "G", "G"],
+                ["B", "G", "G", "R", "G", "G"],
+                ["G", "R", "B", "G", "B", "R"],
+                ["B", "G", "G", "R", "G", "G"],
+                ["R", "G", "G", "B", "G", "G"],
+            ]
+        )
+        cmap = {"R": 0, "G": 1, "B": 2}
+
+        for i in range(6):
+            for j in range(6):
+                ch = cmap[xtrans_pattern[i, j]]
+                sparse[ch, i::6, j::6] = image[ch, i::6, j::6]
+    return sparse
+
+
 def sparse_representation(cfa, pattern="RGGB", cfa_type="bayer"):
     """
     Make a sparse representation of a CFA.
@@ -288,3 +342,20 @@ def sparse_representation(cfa, pattern="RGGB", cfa_type="bayer"):
                 ch = cmap[xtrans_pattern[i, j]]
                 sparse[ch, i::6, j::6] = cfa[i::6, j::6]
     return sparse
+
+
+def sparse_representation_and_mask(cfa, pattern):
+    H, W = cfa.shape
+    sparse = np.zeros((3, H, W), dtype=cfa.dtype)
+    mask = np.zeros((3, H, W), dtype=int)
+    pattern_shape = pattern.shape
+    for i in range(pattern_shape[0]):
+        for j in range(pattern_shape[1]):
+            ch = pattern[i, j]
+            if ch == 3:
+                ch = 1
+            sparse[ch, i :: pattern_shape[0], j :: pattern_shape[1]] = cfa[
+                i :: pattern_shape[0], j :: pattern_shape[1]
+            ]
+            mask[ch, i :: pattern_shape[0], j :: pattern_shape[1]] = 1
+    return sparse, mask
