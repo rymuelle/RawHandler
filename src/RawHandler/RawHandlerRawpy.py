@@ -1,12 +1,15 @@
 import numpy as np
 import rawpy
 from typing import NamedTuple, Optional
-from RawHandler.utils import get_exif_data, sparse_representation_three_channel
-from typing import Literal
+from RawHandler.utils import sparse_representation_three_channel
+from RawHandler.MetaDataHandler import MetaDataHandler
+from RawHandler.dng_utils import to_dng
+from typing import Literal, Tuple
 
 from RawHandler.utils import (
     make_colorspace_matrix,
     pixel_unshuffle,
+    sparse_representation_and_mask
 )
 
 
@@ -28,7 +31,7 @@ class BaseRawHandlerRawpy:
     Args:
         pixel_array (np.array): A 2D NumPy array representing the raw pixel data.
         core_metadata (CoreRawMetadata): A NamedTuple containing essential metadata for processing.
-        full_metadata (Optional[FullRawMetadata]): A Dict containing additional, general metadata.
+        full_metadata (Optional[FullRawMetadata]): A class wrapping exiv2 to handle metadata information.
     """
 
     def __init__(
@@ -45,28 +48,31 @@ class BaseRawHandlerRawpy:
 
         self.rawpy_object = rawpy_object
         self.core_metadata = core_metadata
-        self.full_metadata = full_metadata if full_metadata is not None else {}
+        self.full_metadata = full_metadata if full_metadata is not None else None
         self.colorspace = colorspace
         self.camera_linear = None
 
     def compute_linear(self):
-        camera_linear = (
+         self.camera_linear = (
             self.rawpy_object.postprocess(
-                output_color=rawpy.ColorSpace.XYZ,
+                user_wb=[1, 1, 1, 1], 
+                output_color=rawpy.ColorSpace.raw,
                 no_auto_bright=True,
                 use_camera_wb=False,
                 use_auto_wb=False,
                 gamma=(1, 1),
                 user_flip=0,
                 output_bps=16,
+                user_black=0,
+                no_auto_scale=True
             )
-            / 65535
+            / self.core_metadata.white_level
         ).transpose(2, 0, 1)
     
-        orig_dims = camera_linear.shape
-        rgb_to_xyz = self.core_metadata.rgb_xyz_matrix[:3]
-        camera_linear = (rgb_to_xyz @ camera_linear.reshape(3, -1)).reshape(orig_dims)
-        self.camera_linear = camera_linear
+        # orig_dims = camera_linear.shape
+        # rgb_to_xyz = self.core_metadata.rgb_xyz_matrix[:3]
+        # camera_linear = (rgb_to_xyz @ camera_linear.reshape(3, -1)).reshape(orig_dims)
+        # self.camera_linear = camera_linear
 
     def _input_handler(self, dims=None, safe_crop=0) -> np.ndarray:
         """
@@ -83,27 +89,27 @@ class BaseRawHandlerRawpy:
             return self.camera_linear[:, h1:h2, w1:w2]
         else:
             return self.camera_linear
-
-    def rgb_colorspace_transform(self, colorspace=None, **kwargs) -> np.ndarray:
-        """
-        Generates a color space transformation matrix for this image.
-        """
-        colorspace = colorspace or self.colorspace
-        if colorspace == "camera":
-            return np.array(
-                [
-                    [1.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0],
-                    [0.0, 0.0, 1.0],
-                ]
-            )
-        rgb_to_xyz = np.linalg.inv(self.core_metadata.rgb_xyz_matrix[:3])
-        if colorspace == "XYZ":
-            return rgb_to_xyz
-
-        transform = make_colorspace_matrix(rgb_to_xyz, colorspace=colorspace, **kwargs)
-        return transform
         
+    def rgb_colorspace_transform(self, colorspace=None, **kwargs) -> np.ndarray:
+            """
+            Generates a color space transformation matrix for this image.
+            """
+            colorspace = colorspace or self.colorspace
+            if colorspace == "camera":
+                return np.array(
+                    [
+                        [1.0, 0.0, 0.0],
+                        [0.0, 1.0, 0.0],
+                        [0.0, 0.0, 1.0],
+                    ]
+                )
+            rgb_to_xyz = np.linalg.inv(self.core_metadata.rgb_xyz_matrix[:3])
+            if colorspace == "XYZ":
+                return rgb_to_xyz
+
+            transform = make_colorspace_matrix(rgb_to_xyz, colorspace=colorspace, **kwargs)
+            return transform
+    
     def apply_colorspace_transform(
         self,
         dims=None,
@@ -124,6 +130,20 @@ class BaseRawHandlerRawpy:
         if clip:
             transformed = np.clip(transformed, 0, 1)
         return transformed
+    
+    def compute_mask_and_sparse(self, dims=None, safe_crop=0, divide_by_wl=True) -> Tuple[np.ndarray, np.ndarray]:
+        sparse, mask =  sparse_representation_and_mask(self.rawpy_object.raw_image_visible, self.core_metadata.raw_pattern)
+        if divide_by_wl: sparse = sparse / self.core_metadata.white_level
+        if dims is not None:
+            h1, h2, w1, w2 = dims
+            if safe_crop:
+                h1, h2, w1, w2 = list(
+                    map(lambda x: x - x % safe_crop, [h1, h2, w1, w2])
+                )
+            return sparse[:, h1:h2, w1:w2], mask[:, h1:h2, w1:w2]
+        else:
+            return sparse, mask
+        
 
     def downsize(
         self, min_preview_size=256, colorspace=None, clip=False, safe_crop=0
@@ -197,6 +217,13 @@ class BaseRawHandlerRawpy:
             rggb = pixel_unshuffle(cfa, 6)
         return rggb
 
+    def to_dng(self, filepath, uint_img=None):
+        try:
+            to_dng(self, filepath, uint_img=uint_img)
+            return True
+        except Exception as e:
+            print(e)
+            return False
 
 class RawHandlerRawpy:
     """
@@ -223,8 +250,9 @@ class RawHandlerRawpy:
             iwidth=rawpy_object.sizes.iwidth,
         )
 
-        # Extract Full (General) Metadata using exifread
-        metadata = get_exif_data(path)
+        # Extract Metadata using exiv2
+        metadata = MetaDataHandler(path)
+        
 
         return BaseRawHandlerRawpy(
             rawpy_object=rawpy_object,

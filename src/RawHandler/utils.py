@@ -342,3 +342,17 @@ def sparse_representation(cfa, pattern="RGGB", cfa_type="bayer"):
                 ch = cmap[xtrans_pattern[i, j]]
                 sparse[ch, i::6, j::6] = cfa[i::6, j::6]
     return sparse
+
+
+def sparse_representation_and_mask(cfa, pattern):
+    H, W = cfa.shape
+    sparse = np.zeros((3, H, W), dtype=cfa.dtype)
+    mask = np.zeros((3, H, W), dtype=int)
+    pattern_shape = pattern.shape
+    for i in range(pattern_shape[0]):
+        for j in range(pattern_shape[1]):
+            ch = pattern[i, j]
+            if ch == 3: ch = 1
+            sparse[ch, i::pattern_shape[0], j::pattern_shape[1]] = cfa[i::pattern_shape[0], j::pattern_shape[1]]
+            mask[ch, i::pattern_shape[0], j::pattern_shape[1]] = 1
+    return sparse, mask
