@@ -19,6 +19,8 @@ dependencies = [
     "rawpy>=0.24.0",
     "colour_demosaicing>=0.2.6",
     "exifread>=3.3.1",
+    "exiv2",
+    "tifffile>=2024.0.0",
     ]
 
 [project.optional-dependencies]
