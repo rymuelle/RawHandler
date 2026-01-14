@@ -134,32 +134,31 @@ class BaseRawHandlerRawpy:
     def compute_mask_and_sparse(
         self, dims=None, safe_crop=0, divide_by_wl=True
     ) -> Tuple[np.ndarray, np.ndarray]:
-      raw_img = self.rawpy_object.raw_image_visible
-      
-      if dims is not None:
-          h1, h2, w1, w2 = dims
-          if safe_crop:
-              # Replaced lambda/map with bitwise/integer math for speed
-              h1 -= h1 % safe_crop
-              h2 -= h2 % safe_crop
-              w1 -= w1 % safe_crop
-              w2 -= w2 % safe_crop
-          raw_img = raw_img[h1:h2, w1:w2]
-          # Roll the pattern to align with crop
-          pattern = np.roll(self.core_metadata.raw_pattern, shift=(-h1, -w1), axis=(0, 1))
-      # Compute sparse representation on the (potentially smaller) image
-      sparse, mask = sparse_representation_and_mask(
-          raw_img, pattern
-      )
-      
-      # Scale by white level
-      if divide_by_wl:
-          # Multiply by reciprocal is often faster than division
-          sparse = sparse * (1.0 / self.core_metadata.white_level)
-          
-      return sparse, mask
-    
-    
+        raw_img = self.rawpy_object.raw_image_visible
+
+        if dims is not None:
+            h1, h2, w1, w2 = dims
+            if safe_crop:
+                # Replaced lambda/map with bitwise/integer math for speed
+                h1 -= h1 % safe_crop
+                h2 -= h2 % safe_crop
+                w1 -= w1 % safe_crop
+                w2 -= w2 % safe_crop
+            raw_img = raw_img[h1:h2, w1:w2]
+            # Roll the pattern to align with crop
+            pattern = np.roll(
+                self.core_metadata.raw_pattern, shift=(-h1, -w1), axis=(0, 1)
+            )
+        # Compute sparse representation on the (potentially smaller) image
+        sparse, mask = sparse_representation_and_mask(raw_img, pattern)
+
+        # Scale by white level
+        if divide_by_wl:
+            # Multiply by reciprocal is often faster than division
+            sparse = sparse * (1.0 / self.core_metadata.white_level)
+
+        return sparse, mask
+
     def downsize(
         self, min_preview_size=256, colorspace=None, clip=False, safe_crop=0
     ) -> np.ndarray:

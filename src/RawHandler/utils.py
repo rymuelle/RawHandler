@@ -343,24 +343,23 @@ def sparse_representation(cfa, pattern="RGGB", cfa_type="bayer"):
                 sparse[ch, i::6, j::6] = cfa[i::6, j::6]
     return sparse
 
+
 def sparse_representation_and_mask(cfa, pattern):
     H, W = cfa.shape
     ph, pw = pattern.shape
     # If two green channels, set both to 1
-    pattern[pattern==3] = 1
+    pattern[pattern == 3] = 1
     # Create the output arrays
     sparse = np.zeros((3, H, W), dtype=cfa.dtype)
     mask = np.zeros((3, H, W), dtype=np.uint8)
-    
+
     # Tile the pattern to match the CFA shape
     full_pattern = np.tile(pattern, (H // ph + 1, W // pw + 1))
     full_pattern = full_pattern[:H, :W]
 
     # Vectorized assignment for each channel (R, G, B)
     for ch in range(3):
-        ch_mask = (full_pattern == ch)
+        ch_mask = full_pattern == ch
         mask[ch] = ch_mask
         sparse[ch] = cfa * ch_mask
     return sparse, mask
-
-
