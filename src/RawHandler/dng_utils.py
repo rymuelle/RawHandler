@@ -155,26 +155,26 @@ def copy_exif_to_dng(rh):
             tags.append((tag, 5, 1, [num, den], True))
 
     # --- ASCII ---
-    ascii_tag(271, "Exif.Image.Make")
-    ascii_tag(272, "Exif.Image.Model")
-    ascii_tag(306, "Exif.Image.DateTime")
-    ascii_tag(315, "Exif.Image.Artist")
-    ascii_tag(33432, "Exif.Image.Copyright")
-    ascii_tag(42036, "Exif.Photo.LensModel")
-    ascii_tag(42035, "Exif.Photo.LensMake")
-    ascii_tag(42034, "Exif.Photo.LensSerialNumber")
+    # ascii_tag(271, "Exif.Image.Make")
+    # ascii_tag(272, "Exif.Image.Model")
+    # ascii_tag(306, "Exif.Image.DateTime")
+    # ascii_tag(315, "Exif.Image.Artist")
+    # ascii_tag(33432, "Exif.Image.Copyright")
+    # ascii_tag(42036, "Exif.Photo.LensModel")
+    # ascii_tag(42035, "Exif.Photo.LensMake")
+    # ascii_tag(42034, "Exif.Photo.LensSerialNumber")
 
     # --- Numerical ---
     short_tag(274, "Exif.Image.Orientation")
     iso_val = int(rh.full_metadata.get_ISO())
     tags.append((34855, 4, 1, iso_val, True))
-    tags.append((34864, 3, 1, 3, True))  # SensitivityType
-    tags.append((34865, 4, 1, iso_val, True))  # StandardOutputSensitivity
-    # --- Rationals ---
-    rational_tag(33434, "Exif.Photo.ExposureTime")
-    rational_tag(33437, "Exif.Photo.FNumber")
-    rational_tag(37386, "Exif.Photo.FocalLength")
-    rational_tag(50730, "Exif.Photo.ExposureBiasValue")
+    # tags.append((34864, 3, 1, 3, True))  # SensitivityType
+    # tags.append((34865, 4, 1, iso_val, True))  # StandardOutputSensitivity
+    # # --- Rationals ---
+    # rational_tag(33434, "Exif.Photo.ExposureTime")
+    # rational_tag(33437, "Exif.Photo.FNumber")
+    # rational_tag(37386, "Exif.Photo.FocalLength")
+    # rational_tag(50730, "Exif.Photo.ExposureBiasValue")
 
     # tags.append((50730, 10, 1, [0, 100], True))
 
@@ -217,7 +217,7 @@ def calculate_forward_matrix(color_matrix_3x3, as_shot_neutral):
     return forward_matrix
 
 
-def to_dng(rh, filepath, uint_img=None):
+def to_dng(rh, filepath, uint_img=None, user_black_level=None):
     """
     Saves image as a DNG-compatible TIFF.
         rh: RawHandlerRawpy Object
@@ -324,6 +324,7 @@ def to_dng(rh, filepath, uint_img=None):
     tags.append((50723, 3, 1, 21, True))
 
     exif_tags = copy_exif_to_dng(rh)
+    # exif_tags = []
     # 4. Save the file
     planarconfig = None if is_CFA else 1
     tifffile.imwrite(
