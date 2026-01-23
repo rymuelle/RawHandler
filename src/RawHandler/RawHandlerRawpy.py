@@ -52,22 +52,38 @@ class BaseRawHandlerRawpy:
         self.colorspace = colorspace
         self.camera_linear = None
 
-    def compute_linear(self):
-        self.camera_linear = (
-            self.rawpy_object.postprocess(
-                user_wb=[1, 1, 1, 1],
-                output_color=rawpy.ColorSpace.raw,
-                no_auto_bright=True,
-                use_camera_wb=False,
-                use_auto_wb=False,
-                gamma=(1, 1),
-                user_flip=0,
-                output_bps=16,
-                user_black=0,
-                no_auto_scale=True,
-            )
-            / self.core_metadata.white_level
-        ).transpose(2, 0, 1)
+    def compute_linear(self, subtract_black=False):
+        if not subtract_black:
+            self.camera_linear = (
+                self.rawpy_object.postprocess(
+                    user_wb=[1, 1, 1, 1],
+                    output_color=rawpy.ColorSpace.raw,
+                    no_auto_bright=True,
+                    use_camera_wb=False,
+                    use_auto_wb=False,
+                    gamma=(1, 1),
+                    user_flip=0,
+                    output_bps=16,
+                    user_black=0,
+                    no_auto_scale=True,
+                )
+                / self.core_metadata.white_level
+            ).transpose(2, 0, 1)
+        else:
+            self.camera_linear = (
+                    self.rawpy_object.postprocess(
+                        user_wb=[1, 1, 1, 1],
+                        output_color=rawpy.ColorSpace.raw,
+                        no_auto_bright=True,
+                        use_camera_wb=False,
+                        use_auto_wb=False,
+                        gamma=(1, 1),
+                        user_flip=0,
+                        output_bps=16,
+                        no_auto_scale=True,
+                    )
+                    / self.core_metadata.white_level
+                ).transpose(2, 0, 1)  
 
     # orig_dims = camera_linear.shape
     # rgb_to_xyz = self.core_metadata.rgb_xyz_matrix[:3]
@@ -231,9 +247,9 @@ class BaseRawHandlerRawpy:
             rggb = pixel_unshuffle(cfa, 6)
         return rggb
 
-    def to_dng(self, filepath, uint_img=None):
+    def to_dng(self, filepath, uint_img=None, user_black_level=None):
         try:
-            to_dng(self, filepath, uint_img=uint_img)
+            to_dng(self, filepath, uint_img=uint_img, user_black_level=user_black_level)
             return True
         except Exception as e:
             print(e)

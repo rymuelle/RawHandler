@@ -12,6 +12,7 @@ from RawHandler.utils import (
     pixel_shuffle,
     safe_crop,
 )
+from RawHandler.MetaDataHandler import MetaDataHandler
 
 
 # Define a NamedTuple for the core metadata required by BaseRawHandler for processing
@@ -33,26 +34,45 @@ class BaseRawHandler:
         pixel_array (np.array): A 2D NumPy array representing the raw pixel data.
         core_metadata (CoreRawMetadata): A NamedTuple containing essential metadata for processing.
         full_metadata (Optional[FullRawMetadata]): A Dict containing additional, general metadata.
+        rawpy_object (optional): A rawpy object.
     """
 
     def __init__(
         self,
         pixel_array: np.ndarray,
         core_metadata: CoreRawMetadata,
-        full_metadata: Optional[dict] = None,
+        full_metadata: MetaDataHandler,
         colorspace: Literal[
             "camera", "XYZ", "sRGB", "AdobeRGB", "lin_rec2020"
         ] = "lin_rec2020",
+        rawpy_object = None
     ):
         if not isinstance(pixel_array, np.ndarray):
             raise TypeError("pixel_array must be a NumPy array.")
         if not isinstance(core_metadata, CoreRawMetadata):
             raise TypeError("core_metadata must be an instance of CoreRawMetadata.")
-
+        self.rawpy_object = rawpy_object
         self.raw = pixel_array
         self.core_metadata = core_metadata
-        self.full_metadata = full_metadata if full_metadata is not None else {}
+        self.full_metadata = full_metadata 
         self.colorspace = colorspace
+
+    def compute_linear(self):
+        camera_linear = (
+            self.rawpy_object.postprocess(
+                user_wb=[1, 1, 1, 1],
+                output_color=rawpy.ColorSpace.raw,
+                no_auto_bright=True,
+                use_camera_wb=False,
+                use_auto_wb=False,
+                gamma=(1, 1),
+                user_flip=0,
+                output_bps=16,
+                no_auto_scale=True,
+            )
+        )
+        camera_linear = camera_linear / self.core_metadata.white_level
+        return camera_linear.transpose(2, 0, 1)
 
     def _remove_masked_pixels(self, img: np.ndarray) -> np.ndarray:
         """Removes masked pixels from the image based on core_metadata.iheight and core_metadata.iwidth."""
@@ -264,11 +284,11 @@ class RawHandler:
         )
 
         # Extract Full (General) Metadata using exifread
-        metadata = get_exif_data(path)
-
+        metadata = MetaDataHandler(path)
         return BaseRawHandler(
             pixel_array=raw_image,
             core_metadata=core_metadata,
             full_metadata=metadata,
+            rawpy_object = rawpy_object,
             **kwargs,
         )
