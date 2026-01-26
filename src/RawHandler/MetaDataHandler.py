@@ -22,7 +22,7 @@ def get_ISO(metadata):
     ]
 
     exif = metadata.exifData()
-    val = -1
+    val = 0
     for tag in search_tags:
         if tag in exif:
             try:
@@ -31,5 +31,5 @@ def get_ISO(metadata):
                     return float(val)
             except Exception as e:
                 print(e)
-                val = -1
+                val = 0
     return val
