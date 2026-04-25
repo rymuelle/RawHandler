@@ -165,6 +165,8 @@ class BaseRawHandlerRawpy:
             pattern = np.roll(
                 self.core_metadata.raw_pattern, shift=(-h1, -w1), axis=(0, 1)
             )
+        else:
+            pattern = self.core_metadata.raw_pattern
         # Compute sparse representation on the (potentially smaller) image
         sparse, mask = sparse_representation_and_mask(raw_img, pattern)
 
