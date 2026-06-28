@@ -146,11 +146,23 @@ class BaseRawHandlerRawpy:
         if clip:
             transformed = np.clip(transformed, 0, 1)
         return transformed
-
+    
+    def make_mask(self, pattern, H, W):
+        ph, pw = pattern.shape
+        full_pattern = np.tile(pattern, (H // ph + 1, W // pw + 1))
+        full_pattern = full_pattern[:H, :W]
+        return full_pattern
+    
     def compute_mask_and_sparse(
-        self, dims=None, safe_crop=0, divide_by_wl=True
+        self, dims=None, safe_crop=0, divide_by_wl=True, subtract_bl=True,
     ) -> Tuple[np.ndarray, np.ndarray]:
         raw_img = self.rawpy_object.raw_image_visible
+
+        if subtract_bl:
+            black_level_values = np.array(self.rawpy_object.black_level_per_channel)
+            bl_pattern = black_level_values[self.rawpy_object.raw_pattern]
+            black_level_values = self.make_mask(bl_pattern, *self.rawpy_object.raw_image_visible.shape)
+            raw_img = raw_img - black_level_values
 
         if dims is not None:
             h1, h2, w1, w2 = dims
